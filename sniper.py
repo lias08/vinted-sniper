@@ -178,6 +178,38 @@ SUCH_AUFTRÄGE = [
 
 
 
+     {"name": "Pashanim (15)", "webhook": "https://discord.com/api/webhooks/1460274126315982914/m-Vj7rvBdQ0x-ksVoNw9L21IzYYMVDSvyzhfxszW7_DdHZLTzlj31w2RhuYkzlQtIpSW", "vinted_url": "https://www.vinted.de/catalog?search_text=pashanim&search_id=30242658961&price_to=15&currency=EUR&page=1&time=1768226668&search_by_image_uuid="},
+
+
+
+    {"name": "Pasha (15)", "webhook": "https://discord.com/api/webhooks/1460274126315982914/m-Vj7rvBdQ0x-ksVoNw9L21IzYYMVDSvyzhfxszW7_DdHZLTzlj31w2RhuYkzlQtIpSW", "vinted_url": "https://www.vinted.de/catalog?search_text=pasha&search_id=30242686295&price_to=15&currency=EUR&page=1&time=1768226805&search_by_image_uuid="},
+
+
+
+         {"name": "Pashanim (25)", "webhook": "https://discord.com/api/webhooks/1460274208675205120/2XgKnQE_aB3TH9jhvJwZ4SpcCN1Y00-xTjd7Dm6yTh3CXIffqGhSmUk8lynAGeAGr0cC", "vinted_url": "https://www.vinted.de/catalog?search_text=pashanim&search_id=30242658961&price_to=25&currency=EUR&page=1&time=1768226668&search_by_image_uuid="},
+
+
+
+    {"name": "Pasha (25)", "webhook": "https://discord.com/api/webhooks/1460274208675205120/2XgKnQE_aB3TH9jhvJwZ4SpcCN1Y00-xTjd7Dm6yTh3CXIffqGhSmUk8lynAGeAGr0cC", "vinted_url": "https://www.vinted.de/catalog?search_text=pasha&search_id=30242686295&price_to=25&currency=EUR&page=1&time=1768226805&search_by_image_uuid="},
+
+
+
+         {"name": "Pashanim (50)", "webhook": "https://discord.com/api/webhooks/1460274319858073764/gB6Rq-L02mymDD-FiQk7RpU4ZCJUeSI8lv7xYyEzWeIb_H2tHbY79TS62XMHhKdRpUsU", "vinted_url": "https://www.vinted.de/catalog?search_text=pashanim&search_id=30242658961&price_to=50&currency=EUR&page=1&time=1768226668&search_by_image_uuid="},
+
+
+
+    {"name": "Pasha (50)", "webhook": "https://discord.com/api/webhooks/1460274319858073764/gB6Rq-L02mymDD-FiQk7RpU4ZCJUeSI8lv7xYyEzWeIb_H2tHbY79TS62XMHhKdRpUsU", "vinted_url": "https://www.vinted.de/catalog?search_text=pasha&search_id=30242686295&price_to=50&currency=EUR&page=1&time=1768226805&search_by_image_uuid="},
+
+
+
+   {"name": "Pashanim (50)", "webhook": "https://discord.com/api/webhooks/1460274671911043164/iXA8iLmk8hBdEiuzfD0k8VvugYcV5IlWZHcw2aoOx06YyVifTu5GxZMndLpFNO6iVAiq", "vinted_url": "https://www.vinted.de/catalog?search_by_image_uuid=&search_text=pasha&page=1&search_id=30242831825&time=1768226959"},
+
+
+
+    {"name": "Pasha (50)", "webhook": "https://discord.com/api/webhooks/1460274671911043164/iXA8iLmk8hBdEiuzfD0k8VvugYcV5IlWZHcw2aoOx06YyVifTu5GxZMndLpFNO6iVAiq", "vinted_url": "https://www.vinted.de/catalog?search_by_image_uuid=&search_text=pashanim&page=1&search_id=30242848685&time=1768227000"},
+
+
+
     # --- LACOSTE POLOS (Größe L) ---
 
 
