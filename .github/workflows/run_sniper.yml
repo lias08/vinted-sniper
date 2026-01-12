@@ -1,32 +1,21 @@
-name: 24/7 Vinted Sniper
+name: 24/7 MAX SPEED
 on:
   schedule:
-    - cron: '*/15 * * * *' # Startet alle 15 Min neu
-  workflow_dispatch:      # Manueller Start Button
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
 
 jobs:
   snipe:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
-      - name: Python Setup
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-
-      - name: Cache Chrome
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip
-
-      - name: Install Chrome & Dependencies
+      - name: Install Chrome
         run: |
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
           pip install selenium webdriver-manager discord-webhook
-
       - name: Run Sniper
-        #timeout-minutes: 14 # Beendet den Job kurz vor dem nächsten Cron-Start
         run: python sniper.py
