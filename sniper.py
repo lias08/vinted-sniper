@@ -214,6 +214,9 @@ SUCH_AUFTRÄGE = [
 
 
 
+    {"name": "lacaca gut", "webhook": "https://discord.com/api/webhooks/1460325977895862384/F0WuVpUezNuOzGzxtRie4G6PlBfupGLlMoiaeS_HDn6wIKR-xS6Ik9E_iuGZ39CeD6SU", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste&search_id=30248254818&catalog[]=1811&page=1&time=1768239187&brand_ids[]=304&price_to=15.00&currency=EUR&search_by_image_uuid=&size_ids[]=209&size_ids[]=208&size_ids[]=207&order=newest_first"},
+
+
     # --- LACOSTE POLOS (Größe L) ---
 
 
