@@ -210,6 +210,10 @@ SUCH_AUFTRÄGE = [
 
 
 
+    {"name": "swaeater (20)", "webhook": "https://discord.com/api/webhooks/1460300613635014901/oHJZSQewPOjZR_VxxdxKsGTKenywTsQ4uI9IpMxhwOVKAjHuxrYSCEM3LT5G2OEh7mHj", "vinted_url": "https://www.vinted.de/catalog?search_text=sweater&search_id=30245465917&price_to=20&currency=EUR&page=1&time=1768233128&search_by_image_uuid=&brand_ids[]=304&brand_ids[]=677891&brand_ids[]=268734&brand_ids[]=5988006&brand_ids[]=7278799&brand_ids[]=7108764&brand_ids[]=7133888&brand_ids[]=88&brand_ids[]=4273&brand_ids[]=430791&brand_ids[]=442625&brand_ids[]=6962946"},
+
+
+
     # --- LACOSTE POLOS (Größe L) ---
 
 
