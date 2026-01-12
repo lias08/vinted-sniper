@@ -1,23 +1,21 @@
 name: 24/7 MAX SPEED
-
 on:
   schedule:
-    - cron: '0 */6 * * *' # Startet alle 6 Stunden neu (sauberer Turnus)
-  workflow_dispatch: # Erlaubt manuellen Start
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
 
 jobs:
   snipe:
     runs-on: ubuntu-latest
-    concurrency: 
-      group: vinted-sniper
-      cancel-in-progress: true # WICHTIG: Beendet den alten Prozess, wenn ein neuer startet
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-      - name: Install Dependencies
+      - name: Install Chrome
         run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
           pip install selenium webdriver-manager discord-webhook
       - name: Run Sniper
         run: python sniper.py
