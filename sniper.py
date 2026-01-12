@@ -15,7 +15,7 @@ from discord_webhook import DiscordWebhook, DiscordEmbed
 # =================================================================
 BOT_NAME = "Costello Sniper by Lias"
 DEFAULT_SHIPPING = 3.50 
-MAX_RUN_TIME = 21000 # 5 Stunden 50 Minuten
+MAX_RUN_TIME = 21000 # 5 Stunden 50 Minuten (für GitHub Zyklus)
 
 MARKET_DATA = {
     "ralph lauren": 45.0, "lacoste": 50.0, "nike": 35.0, 
@@ -80,17 +80,26 @@ def create_driver():
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
     return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
+def send_status_msg(msg):
+    # Schickt eine kleine Info an den allerersten Webhook in der Liste
+    try:
+        webhook = DiscordWebhook(url=SUCH_AUFTRÄGE[0]['webhook'], content=f"ℹ️ **{BOT_NAME}**: {msg}")
+        webhook.execute()
+    except: pass
+
 def start_bot():
     start_zeit = time.time()
     driver = create_driver()
     seen_items = set()
-    first_run = True # Anti-Spam Schalter
+    first_run = True 
     
-    print("🚀 SNIPER V4 - ANTI-SPAM MODUS AKTIVIERT")
+    print(f"🚀 {BOT_NAME} GESTARTET")
+    send_status_msg("Bot gestartet. Initialer Scan läuft (ca. 5 Min)...")
 
     while True:
+        # Selbstbeendigung für GitHub Actions Neustart
         if time.time() - start_zeit > MAX_RUN_TIME:
-            print("⏳ Zeitlimit erreicht. Neustart...")
+            print("⏳ Zeitlimit erreicht. Automatischer Neustart...")
             driver.quit()
             break
 
@@ -98,21 +107,25 @@ def start_bot():
             try:
                 driver.get(auftrag['vinted_url'])
                 time.sleep(2)
+                
+                # Warten auf Artikel
                 items = driver.find_elements(By.XPATH, "//div[contains(@class, 'feed-grid__item')]")
 
                 for item in items[:5]:
                     try:
-                        url = item.find_element(By.TAG_NAME, "a").get_attribute("href")
+                        url_elem = item.find_element(By.TAG_NAME, "a")
+                        url = url_elem.get_attribute("href")
                         if not url or "items" not in url: continue
+                        
                         item_id = url.split("/")[-1].split("-")[0]
                         
                         if item_id in seen_items: continue
                         seen_items.add(item_id)
 
-                        # Im ersten Durchlauf (Neustart) wird NICHTS gesendet
+                        # ANTI-SPAM: Im ersten Durchlauf nur speichern, nichts senden
                         if first_run: continue 
 
-                        # --- AB HIER: NORMALER BETRIEB ---
+                        # --- ANALYSE ---
                         full_text = item.text
                         lines = [l.strip() for l in full_text.split('\n') if l.strip()]
                         
@@ -120,7 +133,9 @@ def start_bot():
                         for line in lines:
                             if "€" in line and "VERSAND" not in line.upper():
                                 m = re.search(r"(\d+[,.]\d+)", line)
-                                if m: artikel_preis = float(m.group(1).replace(",", ".")); break
+                                if m: 
+                                    artikel_preis = float(m.group(1).replace(",", "."))
+                                    break
 
                         if artikel_preis > 0:
                             webhook = DiscordWebhook(url=auftrag['webhook'], username=BOT_NAME)
@@ -134,16 +149,19 @@ def start_bot():
                             
                             webhook.add_embed(embed)
                             webhook.execute()
-                            print(f"✅ Deal gesendet: {item_id}")
+                            print(f"✅ Deal gefunden: {item_id}")
 
                     except: continue
-            except: continue
+            except Exception as e:
+                print(f"Fehler bei {auftrag['name']}: {e}")
+                continue
         
         if first_run:
             print("🏁 Erst-Scan beendet. Sniper ist jetzt scharf!")
+            send_status_msg("Erst-Scan fertig. Ich bin jetzt scharf geschaltet! 🔥")
             first_run = False
         
-        time.sleep(5)
+        time.sleep(10) # Pause zwischen den Scans
 
 if __name__ == "__main__":
     start_bot()
