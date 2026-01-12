@@ -20,10 +20,8 @@ MARKET_DATA = {
     "stussy": 65.0, "carhartt": 40.0, "stone island": 85.0
 }
 
-VALID_SIZES = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "34", "36", "38", "40", "42", "44", "46", "48", "50", "W30", "W32", "W34", "W36"]
-
 SUCH_AUFTRÄGE = [
-    # --- STANDARDSUCHEN ---
+    # --- STANDARDSUCHEN (17) ---
     {"name": "RL Sweater (25)", "webhook": "https://discord.com/api/webhooks/1459968307317833992/872QLyR-kpgt_suLOMMpmHXqIzAvbIr-1UqKf1Oo0wrEnWo6c8bnSWzoSomPcgRep2Dl", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20sweater&price_to=25&order=newest_first"},
     {"name": "Polo Ralph (50)", "webhook": "https://discord.com/api/webhooks/1459968163931230446/hLnQUo6eTVZwVRwk09XjZlfGvxtV66i5gOUibO1K5FPua93iBJM8FyN1S9uzjWBYGeVA", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20polo&price_from=25&price_to=50&order=newest_first"},
     {"name": "Lacoste Polo (25)", "webhook": "https://discord.com/api/webhooks/1459969267167527116/2oecDcoFw7nRmZ4D04yFEutlWSWE0nfHWm489BrUy6fR8LCbBgxCcTONpZj3HdjT48Pi", "vinted_url": "https://www.vinted.de/catalog?search_text=Lacoste%20polo&price_to=25&order=newest_first"},
@@ -42,7 +40,7 @@ SUCH_AUFTRÄGE = [
     {"name": "RL Sweater (15)", "webhook": "https://discord.com/api/webhooks/1459986179268284447/Xak2iTOVtRmbGwtG5kBjOE35rSa0OnBckKyDNvI4ZkdqvnzoP8In9gcPZfUmDRQrpkYe", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20sweater&price_to=15&order=newest_first"},
     {"name": "Lacoste Sweater (15)", "webhook": "https://discord.com/api/webhooks/1459971644113293512/1gNG07NG4JuirBZ0FlK_5OtINnzyW4CJM8QeSPcfJdOMp1Fyb81bV_2FLib0D7SJYIlP", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20sweater&price_to=15&order=newest_first"},
 
-    # --- GRÖSSE L ---
+    # --- GRÖSSE L (18) ---
     {"name": "Lacoste Polo L (15)", "webhook": "https://discord.com/api/webhooks/1460230213391614076/fwXUTreF8vrgHZei7QFGHkxd_6OgVz-Biq6-aF9Ur4kNRLj7CWWjSX0WEZ6UnrSmH3on", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20polo&price_to=15&size_id[]=3&order=newest_first"},
     {"name": "Lacoste Polo L (25)", "webhook": "https://discord.com/api/webhooks/1460231377122492524/V0yRgLRQRgW3VEf-STsQmWl2xvZNyGWGUDMz5U5RdkTNS9XSo-7QlwLWQrXw3NOx8CML", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20polo&price_from=15&price_to=25&size_id[]=3&order=newest_first"},
     {"name": "Lacoste Polo L (50)", "webhook": "https://discord.com/api/webhooks/1460231479534555137/d5fjuAP9n0lHbbKj4wciZCoz2YE8M379nptE_DykdD8Ap2R1HCTXCo-aNA51yowhOXvJ", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20polo&price_from=25&price_to=50&size_id[]=3&order=newest_first"},
@@ -75,77 +73,65 @@ def create_driver():
 def start_bot():
     driver = create_driver()
     seen_items = set()
-    print("🚀 ULTRA SPEED SNIPER GESTARTET")
+    print(f"🚀 Sniper gestartet mit {len(SUCH_AUFTRÄGE)} Aufträgen.")
 
     while True:
         for auftrag in SUCH_AUFTRÄGE:
             try:
                 driver.get(auftrag['vinted_url'])
-                # Sehr kurzes Warten für Speed
-                WebDriverWait(driver, 3).until(EC.presence_of_element_located((By.CSS_SELECTOR, "[data-testid^='product-item']")))
+                
+                # Warte bis Artikel-Grid da ist
+                try:
+                    WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, "[data-testid^='product-item']")))
+                except:
+                    print(f"⚠️ Nichts gefunden für: {auftrag['name']}")
+                    continue
+
                 items = driver.find_elements(By.CSS_SELECTOR, "[data-testid^='product-item']")
 
-                for item in items[:5]:
+                for item in items[:4]: # Top 4 Artikel prüfen
                     try:
-                        # Direkter Zugriff auf Overlay für URL und Metadaten (Aria-Label)
-                        url_elem = item.find_element(By.CSS_SELECTOR, "a.new-item-box__overlay")
-                        url = url_elem.get_attribute("href")
+                        overlay = item.find_element(By.CSS_SELECTOR, "a[data-testid$='--link']")
+                        url = overlay.get_attribute("href")
                         if not url: continue
                         
                         item_id = url.split("/")[-1].split("-")[0]
                         if item_id in seen_items: continue
                         seen_items.add(item_id)
 
-                        # Aria-Label enthält "Preis, Marke, Größe" - extrem schnell zu lesen
-                        aria_info = url_elem.get_attribute("aria-label").upper()
-                        
-                        # 1. PREIS
-                        price_match = re.search(r"(\d+[,.]\d+)", aria_info)
+                        # Preis extrahieren (aus dem aria-label oder Text)
+                        info_text = overlay.get_attribute("aria-label")
+                        price_match = re.search(r"(\d+[,.]\d+)\s*€", info_text)
                         artikel_preis = float(price_match.group(1).replace(",", ".")) if price_match else 0.0
-                        if artikel_preis == 0: continue
 
-                        # 2. GRÖSSE
-                        groesse = "L" if "SIZE_ID[]=3" in auftrag['vinted_url'].upper() else "-"
-                        if groesse == "-":
-                            for s in VALID_SIZES:
-                                if f" {s} " in f" {aria_info} ":
-                                    groesse = s; break
+                        if artikel_preis > 0:
+                            # Kalkulation
+                            fee = round(0.70 + (artikel_preis * 0.05), 2)
+                            total = round(artikel_preis + fee + DEFAULT_SHIPPING, 2)
+                            
+                            # Senden
+                            webhook = DiscordWebhook(url=auftrag['webhook'], username=BOT_NAME)
+                            embed = DiscordEmbed(title=f"🛒 {auftrag['name']}", url=url, color="00ff00")
+                            embed.add_embed_field(name="Preis", value=f"{artikel_preis}€", inline=True)
+                            embed.add_embed_field(name="Gesamt (inkl. Fee/Versand)", value=f"{total}€", inline=True)
+                            
+                            try:
+                                img = item.find_element(By.TAG_NAME, "img").get_attribute("src")
+                                embed.set_image(url=img)
+                            except: pass
 
-                        # 3. BERECHNUNG
-                        fee = round(0.70 + (artikel_preis * 0.05), 2)
-                        total = round(artikel_preis + fee + DEFAULT_SHIPPING, 2)
-                        
-                        marktwert = 20.0
-                        for brand, val in MARKET_DATA.items():
-                            if brand in url.lower(): marktwert = val; break
-                        profit = round(marktwert - total, 2)
-
-                        # Discord Webhook (Execute ohne langes Warten)
-                        webhook = DiscordWebhook(url=auftrag['webhook'], username=BOT_NAME)
-                        embed = DiscordEmbed(title=f"📦 {auftrag['name']}", color='2ecc71', url=url)
-                        embed.add_embed_field(name='📏 GRÖSSE', value=f"**{groesse}**", inline=True)
-                        embed.add_embed_field(name='🏷️ ARTIKEL', value=f"{artikel_preis}€", inline=True)
-                        embed.add_embed_field(name='💰 GESAMT', value=f"**{total}€**", inline=True)
-                        embed.add_embed_field(name='📊 PROFIT', value=f"**{profit}€**", inline=True)
-
-                        try:
-                            img = item.find_element(By.TAG_NAME, "img").get_attribute("src")
-                            if img: embed.set_image(url=img)
-                        except: pass
-
-                        webhook.add_embed(embed)
-                        webhook.execute()
-                        print(f"✅ Sofort gesendet: {auftrag['name']}")
+                            webhook.add_embed(embed)
+                            webhook.execute()
+                            print(f"✅ Deal gesendet: {item_id}")
 
                     except: continue
             except Exception as e:
-                print(f"Browser-Error (Auto-Restart): {e}")
+                print(f"❌ Fehler bei {auftrag['name']}, Driver Neustart...")
                 driver.quit()
                 driver = create_driver()
                 break
         
-        # Minimale Pause um CPU zu schonen, aber fast Instant-Loop
-        time.sleep(0.5)
+        time.sleep(1) # Kleine Pause zwischen den Zyklen
 
 if __name__ == "__main__":
     start_bot()
