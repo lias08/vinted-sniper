@@ -9,11 +9,23 @@ from webdriver_manager.chrome import ChromeDriverManager
 from discord_webhook import DiscordWebhook, DiscordEmbed
 
 # =================================================================
-# KONFIGURATION
+# KONFIGURATION & PREIS-LOGIK
 # =================================================================
 BOT_NAME = "Costello Sniper"
 BOT_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png"
-MAX_RUN_TIME = 21000 # 5 Stunden 50 Minuten
+SHIPPING = 3.50
+MAX_RUN_TIME = 21000 # Ca. 5 Stunden 50 Minuten
+
+# Durchschnittliche Marktwerte für Profit-Berechnung
+MARKET_VALUES = {
+    "lacoste": 55.0,
+    "ralph lauren": 50.0,
+    "nike": 40.0,
+    "pashanim": 65.0,
+    "pasha": 65.0,
+    "stussy": 75.0,
+    "carhartt": 45.0
+}
 
 SUCH_AUFTRÄGE = [
     {"name": "RL Sweater (25)", "webhook": "https://discord.com/api/webhooks/1459968307317833992/872QLyR-kpgt_suLOMMpmHXqIzAvbIr-1UqKf1Oo0wrEnWo6c8bnSWzoSomPcgRep2Dl", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20sweater&price_to=25&order=newest_first"},
@@ -72,15 +84,28 @@ def create_driver():
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     return driver
 
-def send_msg(url, title, price, img_url):
-    try:
-        webhook = DiscordWebhook(url=url, username=BOT_NAME, avatar_url=BOT_AVATAR)
-        embed = DiscordEmbed(title=title, color='03b2f8', url=url)
-        embed.add_embed_field(name='Preis', value=f"**{price}**", inline=True)
-        if img_url: embed.set_image(url=img_url)
-        webhook.add_embed(embed)
-        webhook.execute()
-    except Exception as e: print(f"Webhook Error: {e}")
+def send_deal(webhook_url, name, price_val, size, img_url, item_url):
+    market_val = 50.0 # Standard
+    for brand, val in MARKET_VALUES.items():
+        if brand in name.lower():
+            market_val = val
+            break
+    
+    total_cost = price_val + SHIPPING
+    profit = market_val - total_cost
+
+    webhook = DiscordWebhook(url=webhook_url, username=BOT_NAME, avatar_url=BOT_AVATAR)
+    embed = DiscordEmbed(title=f"📦 {name}", color='2ecc71', url=item_url)
+    embed.add_embed_field(name='📏 GRÖSSE', value=f"**{size}**", inline=True)
+    embed.add_embed_field(name='🏷️ ARTIKEL', value=f"**{price_val:.2f}€**", inline=True)
+    embed.add_embed_field(name='🚚 VERSAND', value=f"**{SHIPPING}€**", inline=True)
+    embed.add_embed_field(name='💰 GESAMT', value=f"**{total_cost:.2f}€**", inline=True)
+    embed.add_embed_field(name='📈 PROFIT', value=f"**{profit:.2f}€**", inline=True)
+    
+    if img_url: embed.set_image(url=img_url)
+    embed.set_footer(text="Costello Sniper • Live Updates")
+    webhook.add_embed(embed)
+    webhook.execute()
 
 def start_bot():
     start_time = time.time()
@@ -88,7 +113,7 @@ def start_bot():
     seen_ids = set()
     first_run = True
     
-    print("🚀 Sniper startet...")
+    print("🚀 Starte Costello Sniper mit allen 42 Aufträgen...")
     
     while True:
         if time.time() - start_time > MAX_RUN_TIME: break
@@ -96,41 +121,39 @@ def start_bot():
         for auftrag in SUCH_AUFTRÄGE:
             try:
                 driver.get(auftrag['vinted_url'])
-                time.sleep(3) # Etwas mehr Zeit zum Laden geben
-                
-                # Suche Artikel über das data-testid Attribut
+                time.sleep(4)
                 items = driver.find_elements(By.CSS_SELECTOR, "[data-testid^='product-item']")
-                print(f"🔍 {auftrag['name']}: {len(items)} Artikel gefunden.")
 
                 for item in items[:5]:
                     try:
-                        link_elem = item.find_element(By.TAG_NAME, "a")
-                        href = link_elem.get_attribute("href")
+                        href = item.find_element(By.TAG_NAME, "a").get_attribute("href")
                         item_id = href.split("/")[-1].split("-")[0]
 
                         if item_id in seen_ids: continue
                         seen_ids.add(item_id)
-
                         if first_run: continue
 
-                        # Preis extrahieren
-                        price_text = item.text.split('€')[0].split('\n')[-1] + "€"
+                        raw_text = item.text.replace(",", ".")
+                        price_match = re.search(r"(\d+\.\d+)€", raw_text)
+                        price_val = float(price_match.group(1)) if price_match else 0.0
                         
-                        # Bild extrahieren
+                        size = "N/A"
+                        for s in ["XXS", "XS", "S", "M", "L", "XL", "XXL"]:
+                            if f"\n{s}\n" in item.text:
+                                size = s
+                                break
+
                         try: img = item.find_element(By.TAG_NAME, "img").get_attribute("src")
                         except: img = None
 
-                        send_msg(auftrag['webhook'], auftrag['name'], price_text, img)
-                        print(f"✅ NEU: {item_id}")
+                        send_deal(auftrag['webhook'], auftrag['name'], price_val, size, img, href)
                     except: continue
-            except Exception as e:
-                print(f"Fehler bei {auftrag['name']}: {e}")
+            except: continue
         
         if first_run:
-            print("🏁 Erst-Scan beendet. Bot ist jetzt LIVE!")
+            print("🏁 Erst-Scan fertig. Bot ist jetzt im Sniper-Modus!")
             first_run = False
-        
-        time.sleep(5)
+        time.sleep(10)
 
 if __name__ == "__main__":
     start_bot()
