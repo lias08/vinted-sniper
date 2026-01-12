@@ -16,19 +16,13 @@ from discord_webhook import DiscordWebhook, DiscordEmbed
 BOT_NAME = "Costello Sniper Ultimate"
 DEFAULT_SHIPPING = 3.50 
 
-# Marktdaten für Profit-Berechnung
 MARKET_DATA = {
-    "ralph lauren": 45.0, 
-    "lacoste": 50.0, 
-    "nike": 35.0, 
-    "stussy": 65.0, 
-    "carhartt": 40.0,
-    "stone island": 85.0
+    "ralph lauren": 45.0, "lacoste": 50.0, "nike": 35.0, 
+    "stussy": 65.0, "carhartt": 40.0, "stone island": 85.0
 }
 
 VALID_SIZES = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "3XL", "34", "36", "38", "40", "42", "44", "46", "48", "W30", "W32", "W34"]
 
-# ALLE DEINE AUFTRÄGE
 SUCH_AUFTRÄGE = [
     {"name": "RL Sweater (25)", "webhook": "https://discord.com/api/webhooks/1459968307317833992/872QLyR-kpgt_suLOMMpmHXqIzAvbIr-1UqKf1Oo0wrEnWo6c8bnSWzoSomPcgRep2Dl", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20sweater&price_to=25&order=newest_first"},
     {"name": "Polo Ralph (50)", "webhook": "https://discord.com/api/webhooks/1459968163931230446/hLnQUo6eTVZwVRwk09XjZlfGvxtV66i5gOUibO1K5FPua93iBJM8FyN1S9uzjWBYGeVA", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20polo&price_from=25&price_to=50&order=newest_first"},
@@ -55,63 +49,68 @@ def create_driver():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("window-size=1920,1080")
+    # Stealth: Verhindert, dass Vinted den Bot sofort blockt
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    return driver
+    return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
 def start_bot():
     driver = create_driver()
     seen_items = set()
-    print(f"🔥 SNIPER V6 AKTIV - PRÜFE {len(SUCH_AUFTRÄGE)} AUFTRÄGE")
+    print("💎 VINTED SNIPER V7 - PERFEKTE ERKENNUNG AKTIVIERT")
 
     while True:
         for auftrag in SUCH_AUFTRÄGE:
             try:
                 driver.get(auftrag['vinted_url'])
                 
-                # Warten bis Artikel geladen sind
+                # Warten bis die Seite geladen ist
                 WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.feed-grid__item")))
                 
-                # Kleiner Scroll für Dynamic Loading
-                driver.execute_script("window.scrollTo(0, 400);")
+                # Simulation von Scrollen (macht Daten sichtbar)
+                driver.execute_script("window.scrollTo(0, 300);")
                 time.sleep(1)
 
                 items = driver.find_elements(By.CSS_SELECTOR, "div.feed-grid__item")
 
-                for item in items[:4]: # Die neuesten 4 pro Suche
+                for item in items[:5]:
                     try:
-                        # Overlay-Element für Link und Aria-Label
-                        link_elem = item.find_element(By.CSS_SELECTOR, "a.new-item-box__overlay")
-                        url = link_elem.get_attribute("href")
-                        if not url: continue
-                        
+                        # Link-Element ist der Schlüssel (enthält aria-label)
+                        overlay = item.find_element(By.CSS_SELECTOR, "a.new-item-box__overlay")
+                        url = overlay.get_attribute("href")
                         item_id = url.split("/")[-1].split("-")[0]
+                        
                         if item_id in seen_items: continue
                         seen_items.add(item_id)
 
-                        # EXTRAKTION VIA ARIA-LABEL
-                        info_text = link_elem.get_attribute("aria-label")
-                        if not info_text:
-                            # Fallback auf Article Label
-                            info_text = item.find_element(By.TAG_NAME, "article").get_attribute("aria-label")
+                        # --- DER PERFEKTE TRICK: ARIA-LABEL ---
+                        # Hier steht alles im Klartext drin: "Marke, Preis, Größe"
+                        full_info = overlay.get_attribute("aria-label")
+                        if not full_info:
+                            # Manchmal liegt das Label auf dem article-Tag
+                            full_info = item.find_element(By.TAG_NAME, "article").get_attribute("aria-label")
 
-                        if not info_text: continue
-
-                        # Preis finden (Zahl vor €)
-                        price_match = re.search(r"(\d+[\d,.]*)\s*€", info_text)
-                        artikel_preis = float(price_match.group(1).replace(",", ".")) if price_match else 0.0
-
-                        # Größe finden
+                        # Preis extrahieren (Sucht nach Zahl vor dem € Symbol)
+                        # Beispiel: "Ralph Lauren Sweater, 15,00 €" -> 15.0
+                        price_match = re.search(r"(\d+[\d,.]*)\s*€", full_info)
+                        if not price_match: continue
+                        
+                        artikel_preis = float(price_match.group(1).replace(",", "."))
+                        
+                        # Größe extrahieren
                         groesse = "-"
                         for s in VALID_SIZES:
-                            # Prüft ob Größe isoliert im Label steht
-                            if re.search(rf"[, ]{s}[, ]", info_text + " "):
+                            if f" {s}," in full_info or f" {s} " in full_info:
                                 groesse = s
                                 break
 
-                        # Profit-Berechnung
+                        # Versand (wird im aria-label meist nicht detailliert, daher Default + Check)
                         versand_preis = DEFAULT_SHIPPING
+                        if "VERSAND" in item.text.upper():
+                            ship_match = re.search(r"(\d+[,.]\d+)\s*€", item.text)
+                            if ship_match: versand_preis = float(ship_match.group(1).replace(",", "."))
+
+                        # BERECHNUNGEN
                         fee = round(0.70 + (artikel_preis * 0.05), 2)
                         total = round(artikel_preis + fee + versand_preis, 2)
                         
@@ -120,33 +119,32 @@ def start_bot():
                             if brand in url.lower(): marktwert = val; break
                         profit = round(marktwert - total, 2)
 
-                        # Discord Webhook senden
-                        if artikel_preis > 0.5:
-                            webhook = DiscordWebhook(url=auftrag['webhook'], username=BOT_NAME)
-                            embed = DiscordEmbed(title=f"💎 Deal: {auftrag['name']}", color='00ff00', url=url)
-                            embed.add_embed_field(name='📏 GRÖSSE', value=f"**{groesse}**", inline=True)
-                            embed.add_embed_field(name='🏷️ PREIS', value=f"{artikel_preis}€", inline=True)
-                            embed.add_embed_field(name='💰 GESAMT', value=f"**{total}€**", inline=True)
-                            embed.add_embed_field(name='📊 PROFIT', value=f"**{profit}€**", inline=True)
-                            
-                            try:
-                                img = item.find_element(By.TAG_NAME, "img").get_attribute("src")
-                                if img: embed.set_image(url=img)
-                            except: pass
+                        # SENDEN
+                        webhook = DiscordWebhook(url=auftrag['webhook'], username=BOT_NAME)
+                        embed = DiscordEmbed(title=f"✨ DEAL: {auftrag['name']}", color='2ecc71', url=url)
+                        embed.add_embed_field(name='📏 GRÖSSE', value=f"**{groesse}**", inline=True)
+                        embed.add_embed_field(name='🏷️ ARTIKEL', value=f"{artikel_preis}€", inline=True)
+                        embed.add_embed_field(name='💰 GESAMT', value=f"**{total}€**", inline=True)
+                        embed.add_embed_field(name='📊 PROFIT', value=f"**{profit}€**", inline=True)
+                        
+                        try:
+                            img = item.find_element(By.TAG_NAME, "img").get_attribute("src")
+                            if img: embed.set_image(url=img)
+                        except: pass
 
-                            webhook.add_embed(embed)
-                            webhook.execute()
-                            print(f"✅ Item gefunden: {auftrag['name']} - {artikel_preis}€")
+                        webhook.add_embed(embed)
+                        webhook.execute()
+                        print(f"✅ Erkannt & Gesendet: {artikel_preis}€ - {groesse}")
 
                     except Exception: continue
             except Exception as e:
-                print(f"🔄 Restarting Driver...")
+                print(f"🔄 Browser-Reset...")
                 driver.quit()
                 driver = create_driver()
                 break
         
-        # Pause zwischen den Durchläufen (Schutz vor Ban)
-        time.sleep(random.randint(5, 12))
+        # Pause, um Vinted nicht zu triggern
+        time.sleep(random.randint(5, 8))
 
 if __name__ == "__main__":
     start_bot()
