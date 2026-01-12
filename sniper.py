@@ -49,8 +49,13 @@ def create_driver():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    # PERFORMANCE BOOST: Keine Bilder laden
-    options.add_argument("--blink-settings=imagesEnabled=false")
+    
+    # Bilder wieder AN für Discord-Vorschau
+    options.add_argument("--blink-settings=imagesEnabled=true") 
+    
+    # SPEED OPTIMIERUNG
+    options.add_argument("--disable-extensions")
+    options.add_argument("--page-load-strategy=eager") # Lädt nur das Nötigste
     options.add_argument("window-size=1200,800")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     
@@ -60,16 +65,16 @@ def create_driver():
 def start_bot():
     driver = create_driver()
     seen_items = set()
-    print("🚀 HIGH SPEED SNIPER AKTIV")
+    print("🚀 MAX SPEED SNIPER (BILDER AN)")
 
     while True:
         for auftrag in SUCH_AUFTRÄGE:
             try:
                 driver.get(auftrag['vinted_url'])
-                # Reduziertes Wait für Speed
-                WebDriverWait(driver, 2).until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.feed-grid__item")))
                 
+                # Extrem kurzes Waiting für maximalen Speed
                 items = driver.find_elements(By.CSS_SELECTOR, "div.feed-grid__item")
+                
                 for item in items[:3]:
                     try:
                         link_elem = item.find_element(By.TAG_NAME, "a")
@@ -82,41 +87,31 @@ def start_bot():
                         raw_text = item.text
                         item_text_upper = raw_text.upper()
 
-                        # Versand-Check (< 2€ Markierung)
+                        # Versand & Preis
                         current_ship = DEFAULT_SHIPPING
                         ship_match = re.search(r"(\d+[,.]\d+)\s*€\s*VERSAND", item_text_upper)
                         if ship_match:
                             current_ship = float(ship_match.group(1).replace(",", "."))
                         
                         is_cheap = current_ship <= 2.00
-
-                        # Grösse
-                        groesse = "-"
-                        for s in VALID_SIZES:
-                            if re.search(rf'\b{s}\b', item_text_upper):
-                                groesse = s; break
-
-                        # Preise & Profit
                         p_match = re.search(r"(\d+[\d,.]*)\s*€", raw_text)
                         price = float(p_match.group(1).replace(",", ".")) if p_match else 0.0
-                        fee = round(0.70 + (price * 0.05), 2)
-                        total = round(price + fee + current_ship, 2)
-                        
-                        val = 20.0
-                        for brand, m_val in MARKET_DATA.items():
-                            if brand in url.lower(): val = m_val; break
-                        profit = round(val - total, 2)
+                        total = round(price + 0.7 + (price * 0.05) + current_ship, 2)
 
-                        # Discord
+                        # Discord Webhook
                         webhook = DiscordWebhook(url=auftrag['webhook'], username=BOT_NAME)
-                        color = 'f1c40f' if is_cheap else '2ecc71'
-                        embed = DiscordEmbed(title=f"📦 {auftrag['name']}", color=color, url=url)
+                        embed = DiscordEmbed(title=f"📦 {auftrag['name']}", color='2ecc71', url=url)
                         
-                        if is_cheap: embed.set_description("🚚 **BILLIG-VERSAND!**")
+                        if is_cheap: embed.set_description("🚚 **BILLIGER VERSAND!**")
                         
-                        embed.add_embed_field(name='📏 GRÖSSE', value=f"**{groesse}**", inline=True)
                         embed.add_embed_field(name='💰 GESAMT', value=f"**{total}€**", inline=True)
-                        embed.add_embed_field(name='📊 PROFIT', value=f"**+{profit}€**", inline=True)
+                        
+                        # BILD EXTRAHIEREN
+                        try:
+                            img_elem = item.find_element(By.TAG_NAME, "img")
+                            img_url = img_elem.get_attribute("src")
+                            if img_url: embed.set_image(url=img_url)
+                        except: pass
                         
                         webhook.add_embed(embed)
                         webhook.execute()
@@ -125,8 +120,9 @@ def start_bot():
                 driver.quit()
                 driver = create_driver()
                 break
-        # Minimale Pause für Stabilität gegen Bans
-        time.sleep(0.1)
+        
+        # KEIN COOLDOWN - Läuft so schnell die Cloud kann
+        time.sleep(0.01)
 
 if __name__ == "__main__":
     start_bot()
