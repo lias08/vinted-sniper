@@ -5,26 +5,15 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from discord_webhook import DiscordWebhook, DiscordEmbed
 
 # =================================================================
 # KONFIGURATION
 # =================================================================
-BOT_NAME = "Costello Sniper by Lias"
-DEFAULT_SHIPPING = 3.50 
-MAX_RUN_TIME = 21000 # 5 Stunden 50 Minuten (für GitHub Zyklus)
-
-MARKET_DATA = {
-    "ralph lauren": 45.0, "lacoste": 50.0, "nike": 35.0, 
-    "stussy": 65.0, "carhartt": 40.0, "stone island": 85.0
-}
-
-VALID_SIZES = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", 
-               "34", "36", "38", "40", "42", "44", "46", "48", "50", 
-               "W30", "W32", "W34", "W36"]
+BOT_NAME = "Costello Sniper"
+BOT_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png"
+MAX_RUN_TIME = 21000 # 5 Stunden 50 Minuten
 
 SUCH_AUFTRÄGE = [
     {"name": "RL Sweater (25)", "webhook": "https://discord.com/api/webhooks/1459968307317833992/872QLyR-kpgt_suLOMMpmHXqIzAvbIr-1UqKf1Oo0wrEnWo6c8bnSWzoSomPcgRep2Dl", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20sweater&price_to=25&order=newest_first"},
@@ -76,92 +65,72 @@ def create_driver():
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("window-size=1920,1080")
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-    return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+    return driver
 
-def send_status_msg(msg):
-    # Schickt eine kleine Info an den allerersten Webhook in der Liste
+def send_msg(url, title, price, img_url):
     try:
-        webhook = DiscordWebhook(url=SUCH_AUFTRÄGE[0]['webhook'], content=f"ℹ️ **{BOT_NAME}**: {msg}")
+        webhook = DiscordWebhook(url=url, username=BOT_NAME, avatar_url=BOT_AVATAR)
+        embed = DiscordEmbed(title=title, color='03b2f8', url=url)
+        embed.add_embed_field(name='Preis', value=f"**{price}**", inline=True)
+        if img_url: embed.set_image(url=img_url)
+        webhook.add_embed(embed)
         webhook.execute()
-    except: pass
+    except Exception as e: print(f"Webhook Error: {e}")
 
 def start_bot():
-    start_zeit = time.time()
+    start_time = time.time()
     driver = create_driver()
-    seen_items = set()
-    first_run = True 
+    seen_ids = set()
+    first_run = True
     
-    print(f"🚀 {BOT_NAME} GESTARTET")
-    send_status_msg("Bot gestartet. Initialer Scan läuft (ca. 5 Min)...")
-
+    print("🚀 Sniper startet...")
+    
     while True:
-        # Selbstbeendigung für GitHub Actions Neustart
-        if time.time() - start_zeit > MAX_RUN_TIME:
-            print("⏳ Zeitlimit erreicht. Automatischer Neustart...")
-            driver.quit()
-            break
-
+        if time.time() - start_time > MAX_RUN_TIME: break
+        
         for auftrag in SUCH_AUFTRÄGE:
             try:
                 driver.get(auftrag['vinted_url'])
-                time.sleep(2)
+                time.sleep(3) # Etwas mehr Zeit zum Laden geben
                 
-                # Warten auf Artikel
-                items = driver.find_elements(By.XPATH, "//div[contains(@class, 'feed-grid__item')]")
+                # Suche Artikel über das data-testid Attribut
+                items = driver.find_elements(By.CSS_SELECTOR, "[data-testid^='product-item']")
+                print(f"🔍 {auftrag['name']}: {len(items)} Artikel gefunden.")
 
                 for item in items[:5]:
                     try:
-                        url_elem = item.find_element(By.TAG_NAME, "a")
-                        url = url_elem.get_attribute("href")
-                        if not url or "items" not in url: continue
+                        link_elem = item.find_element(By.TAG_NAME, "a")
+                        href = link_elem.get_attribute("href")
+                        item_id = href.split("/")[-1].split("-")[0]
+
+                        if item_id in seen_ids: continue
+                        seen_ids.add(item_id)
+
+                        if first_run: continue
+
+                        # Preis extrahieren
+                        price_text = item.text.split('€')[0].split('\n')[-1] + "€"
                         
-                        item_id = url.split("/")[-1].split("-")[0]
-                        
-                        if item_id in seen_items: continue
-                        seen_items.add(item_id)
+                        # Bild extrahieren
+                        try: img = item.find_element(By.TAG_NAME, "img").get_attribute("src")
+                        except: img = None
 
-                        # ANTI-SPAM: Im ersten Durchlauf nur speichern, nichts senden
-                        if first_run: continue 
-
-                        # --- ANALYSE ---
-                        full_text = item.text
-                        lines = [l.strip() for l in full_text.split('\n') if l.strip()]
-                        
-                        artikel_preis = 0.0
-                        for line in lines:
-                            if "€" in line and "VERSAND" not in line.upper():
-                                m = re.search(r"(\d+[,.]\d+)", line)
-                                if m: 
-                                    artikel_preis = float(m.group(1).replace(",", "."))
-                                    break
-
-                        if artikel_preis > 0:
-                            webhook = DiscordWebhook(url=auftrag['webhook'], username=BOT_NAME)
-                            embed = DiscordEmbed(title=f"📦 {auftrag['name']}", color='2ecc71', url=url)
-                            embed.add_embed_field(name='💰 Preis', value=f"**{artikel_preis}€**", inline=True)
-                            
-                            try:
-                                img = item.find_element(By.TAG_NAME, "img").get_attribute("src")
-                                if img: embed.set_image(url=img)
-                            except: pass
-                            
-                            webhook.add_embed(embed)
-                            webhook.execute()
-                            print(f"✅ Deal gefunden: {item_id}")
-
+                        send_msg(auftrag['webhook'], auftrag['name'], price_text, img)
+                        print(f"✅ NEU: {item_id}")
                     except: continue
             except Exception as e:
                 print(f"Fehler bei {auftrag['name']}: {e}")
-                continue
         
         if first_run:
-            print("🏁 Erst-Scan beendet. Sniper ist jetzt scharf!")
-            send_status_msg("Erst-Scan fertig. Ich bin jetzt scharf geschaltet! 🔥")
+            print("🏁 Erst-Scan beendet. Bot ist jetzt LIVE!")
             first_run = False
         
-        time.sleep(10) # Pause zwischen den Scans
+        time.sleep(5)
 
 if __name__ == "__main__":
     start_bot()
