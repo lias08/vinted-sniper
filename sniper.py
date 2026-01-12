@@ -33,7 +33,7 @@ SUCH_AUFTRÄGE = [
     {"name": "Nike Tracksuit (25)", "webhook": "https://discord.com/api/webhooks/1459969714099851397/3LODYIEOh98xOEDHx8SPtR5lbejv7D8ZU6LewRVJGn21pjJxODFfRxqCBZ6WpjAdqeRX", "vinted_url": "https://www.vinted.de/catalog?search_text=nike%20tracksuits&price_to=25&order=newest_first"},
     {"name": "Nike Tracksuit (50)", "webhook": "https://discord.com/api/webhooks/1459969817581715466/l_HmH5J_SDR_FE-m_aoWIKU7x2Qh2FJ3FgBRldPpWwBhrFmMjS6U-DsdLTbLzaWJrboO", "vinted_url": "https://www.vinted.de/catalog?search_text=nike%20track%20suit&price_from=25&price_to=50&order=newest_first"},
     {"name": "Lacoste Jacke (25)", "webhook": "https://discord.com/api/webhooks/1459970054996365433/6TDcNjmKIxCOavCSIw7oSELNvfkFyelWGAqY9nrnLYrjY-kc-CxDrJmzBGuaTNzJ6YOW", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20jacke&price_to=25&order=newest_first"},
-    {"name": "Polo Ralph (25)", "webhook": "https://discord.com/api/webhooks/1459968897259409716/Uhl_qhTtU04X8mUAv6Api_yFrWeV6UgN1bUE-TjImFmOj59agkwiqtqk-bFliUBQG6oX", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20polo&price_to=25&order=newest_first"},
+    {"name": "Polo Ralph (25)", "webhook": "https://discord.com/api/webhooks/1459968897259409716/Uhl_qhTtU04X8mUAv6Api_yFrWeV6UgY1bUE-TjImFmOj59agkwiqtqk-bFliUBQG6oX", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20polo&price_to=25&order=newest_first"},
     {"name": "Lacoste Jacke (50)", "webhook": "https://discord.com/api/webhooks/1459971644113293512/1gNG07NG4JuirBZ0FlK_5OtINnzyW4CJM8QeSPcfJdOMp1Fyb81bV_2FLib0D7SJYIlP", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20jacke&price_from=25&price_to=50&order=newest_first"},
     {"name": "Lacoste Jacke (15)", "webhook": "https://discord.com/api/webhooks/1459986874905919721/6pjtyAQVF75Zn7ZY4DLNSPUV9U_KFguGKb9cd86D20wNzFnNsTGp4CbCMnblfFk4mzvt", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20jacke&price_to=15&order=newest_first"},
     {"name": "Lacoste Polo (15)", "webhook": "https://discord.com/api/webhooks/1459985966411551008/ytIBTOlto_8RSqUAZYeBgX3qavbHh23ajC0BJLnIoXgKyKwwQ6OWqmf40BGEeVbHDfGa", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20polo&price_to=15&order=newest_first"},
@@ -47,23 +47,23 @@ def create_driver():
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("window-size=1280,1024")
+    options.add_argument("window-size=1920,1080")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
     return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
 def start_bot():
     driver = create_driver()
     seen_items = set()
-    print("🚀 Sniper gestartet - Alle Suchaufträge aktiv")
+    print("🚀 Sniper gestartet - Deep-Selector Modus aktiv")
 
     while True:
         for auftrag in SUCH_AUFTRÄGE:
             try:
                 driver.get(auftrag['vinted_url'])
-                WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.feed-grid__item")))
+                WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.feed-grid__item")))
                 items = driver.find_elements(By.CSS_SELECTOR, "div.feed-grid__item")
 
-                for item in items[:4]:
+                for item in items[:5]:
                     try:
                         link_elem = item.find_element(By.TAG_NAME, "a")
                         url = link_elem.get_attribute("href")
@@ -73,34 +73,42 @@ def start_bot():
                         if item_id in seen_items: continue
                         seen_items.add(item_id)
 
-                        lines = [l.strip() for l in item.text.split('\n') if l.strip()]
-                        all_text_upper = item.text.upper()
-
-                        # PREIS FINDEN (Fix)
-                        artikel_preis = 0.0
-                        for line in lines:
-                            if "€" in line and "VERSAND" not in line.upper():
-                                p_match = re.search(r"(\d+[\d,.]*)", line)
-                                if p_match:
-                                    artikel_preis = float(p_match.group(1).replace(",", "."))
-                                    break
-
-                        # GRÖSSE FINDEN (Fix)
-                        groesse = "-"
-                        for line in lines:
-                            if line.upper() in VALID_SIZES:
-                                groesse = line.upper(); break
-                        if groesse == "-":
-                            for s in VALID_SIZES:
-                                if re.search(rf'\b{s}\b', all_text_upper):
-                                    groesse = s; break
-
-                        # BERECHNUNG
-                        versand_preis = DEFAULT_SHIPPING
-                        ship_match = re.search(r"(\d+[,.]\d+)\s*€\s*VERSAND", all_text_upper)
-                        if ship_match:
-                            versand_preis = float(ship_match.group(1).replace(",", "."))
+                        # --- FIX: GEZIELTE ELEMENT-SUCHE ---
                         
+                        # 1. PREIS (Suche nach der Preis-Klasse)
+                        try:
+                            price_text = item.find_element(By.CSS_SELECTOR, "[data-testid$='-price']").text
+                            artikel_preis = float(re.search(r"(\d+[\d,.]*)", price_text).group(1).replace(",", "."))
+                        except:
+                            artikel_preis = 0.0
+
+                        # 2. GRÖSSE & MARKE (Suche in den Subtitles)
+                        groesse = "-"
+                        try:
+                            subtitles = item.find_elements(By.CSS_SELECTOR, "[data-testid$='-subtitle']")
+                            for sub in subtitles:
+                                txt = sub.text.upper()
+                                # Prüfen ob eine unserer Größen drin vorkommt
+                                for s in VALID_SIZES:
+                                    if s == txt or f" {s} " in f" {txt} " or txt.startswith(f"{s}/"):
+                                        groesse = s
+                                        break
+                                if groesse != "-": break
+                        except:
+                            groesse = "-"
+
+                        # 3. VERSAND
+                        versand_preis = DEFAULT_SHIPPING
+                        try:
+                            # Suche nach dem kleinen Versand-Text unter dem Preis
+                            full_text = item.text.upper()
+                            ship_match = re.search(r"(\d+[,.]\d+)\s*€\s*VERSAND", full_text)
+                            if ship_match:
+                                versand_preis = float(ship_match.group(1).replace(",", "."))
+                        except:
+                            pass
+                        
+                        # BERECHNUNGEN
                         fee = round(0.70 + (artikel_preis * 0.05), 2)
                         total = round(artikel_preis + fee + versand_preis, 2)
 
@@ -109,7 +117,7 @@ def start_bot():
                             if brand in url.lower(): marktwert = val; break
                         profit = round(marktwert - total, 2)
 
-                        # DISCORD EMBED
+                        # DISCORD SENDEN
                         webhook = DiscordWebhook(url=auftrag['webhook'], username=BOT_NAME)
                         embed = DiscordEmbed(title=f"📦 {auftrag['name']}", color='2ecc71', url=url)
                         
@@ -126,12 +134,14 @@ def start_bot():
 
                         webhook.add_embed(embed)
                         webhook.execute()
-                    except: continue
-            except:
+                        print(f"✅ Treffer gesendet: {auftrag['name']} - {total}€")
+                    except Exception as e:
+                        continue
+            except Exception as e:
                 driver.quit()
                 driver = create_driver()
                 break
-        time.sleep(0.5)
+        time.sleep(2)
 
 if __name__ == "__main__":
     start_bot()
