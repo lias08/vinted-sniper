@@ -1,31 +1,21 @@
-name: Vinted Sniper Bot
-
+name: 24/7 MAX SPEED
 on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch: # Erlaubt manuelles Starten
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
 
 jobs:
-  build:
+  snipe:
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-
-    # Chrome ist auf den GitHub-Servern meist schon drauf, 
-    # aber wir stellen sicher, dass alles passt.
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Run Sniper Bot
-      env:
-        DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
-      run: |
-        python sniper.py
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install Chrome
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          pip install selenium webdriver-manager discord-webhook
+      - name: Run Sniper
+        run: python sniper.py
