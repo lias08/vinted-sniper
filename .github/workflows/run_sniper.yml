@@ -1,21 +1,28 @@
-name: 24/7 MAX SPEED
+name: Vinted Sniper
 on:
+  push:
+    branches: [ main ]
   schedule:
-    - cron: '*/15 * * * *'
-  workflow_dispatch:
+    - cron: '*/5 * * * *' # Startet alle 5 Minuten (optional)
 
 jobs:
-  snipe:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-      - name: Install Chrome
+
+      - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-          pip install selenium webdriver-manager discord-webhook
-      - name: Run Sniper
-        run: python sniper.py
+          pip install discord.py selenium webdriver-manager discord-webhook
+
+      - name: Run Bot
+        env:
+          # Hier wird die Verbindung zwischen Secret und Script hergestellt!
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        run: python bot.py
