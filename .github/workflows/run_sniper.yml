@@ -1,13 +1,16 @@
 name: Vinted Sniper
+
 on:
+  workflow_dispatch:      # WICHTIG: Erlaubt den manuellen Start per Button!
   push:
     branches: [ main ]
   schedule:
-    - cron: '*/5 * * * *' # Startet alle 5 Minuten (optional)
+    - cron: '*/15 * * * *' # Alle 15 Min (5 Min ist oft zu schnell für GitHub Free)
 
 jobs:
-  build:
+  snipe:
     runs-on: ubuntu-latest
+    
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -17,12 +20,19 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Install Dependencies
+      # Chrome installieren ist PFLICHT für Selenium
+      - name: Install Google Chrome
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          sudo apt-get install -y xvfb
+
+      - name: Install Python Dependencies
         run: |
           pip install discord.py selenium webdriver-manager discord-webhook
 
-      - name: Run Bot
+      - name: Run Sniper Bot
         env:
-          # Hier wird die Verbindung zwischen Secret und Script hergestellt!
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-        run: python bot.py
+        # xvfb-run simuliert einen Bildschirm für Chrome
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" python bot.py
