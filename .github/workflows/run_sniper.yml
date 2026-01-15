@@ -1,11 +1,14 @@
 name: Vinted Sniper
 
+# Das hier stoppt die Verdopplung:
+concurrency:
+  group: sniper-group
+  cancel-in-progress: true 
+
 on:
-  workflow_dispatch:      # WICHTIG: Erlaubt den manuellen Start per Button!
-  push:
-    branches: [ main ]
-  schedule:
-    - cron: '*/15 * * * *' # Alle 15 Min (5 Min ist oft zu schnell für GitHub Free)
+  workflow_dispatch:      # Manuell starten
+  # schedule:             # Cron am besten auskommentieren, wenn der Bot endlos läuft
+  #   - cron: '0 0 * * *' # Startet z.B. nur 1x täglich neu als Sicherheit
 
 jobs:
   snipe:
@@ -20,7 +23,6 @@ jobs:
         with:
           python-version: '3.9'
 
-      # Chrome installieren ist PFLICHT für Selenium
       - name: Install Google Chrome
         run: |
           sudo apt-get update
@@ -34,5 +36,4 @@ jobs:
       - name: Run Sniper Bot
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-        # xvfb-run simuliert einen Bildschirm für Chrome
         run: xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" python sniper.py
