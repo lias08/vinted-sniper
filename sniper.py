@@ -1,57 +1,64 @@
 import time
 import re
-import os
+import asyncio
+import discord
+from discord.ext import commands, tasks
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from discord_webhook import DiscordWebhook, DiscordEmbed
 
 # =================================================================
-# KONFIGURATION & PREIS-LOGIK
+# KONFIGURATION
 # =================================================================
-BOT_NAME = "Costello Sniper"
-BOT_AVATAR = "https://cdn.discordapp.com/embed/avatars/0.png"
-SHIPPING = 3.50
-MAX_RUN_TIME = 21000 # Ca. 5 Stunden 50 Minuten
+# HIER DEINEN BOT TOKEN EINFÜGEN (Vom Discord Developer Portal)
+BOT_TOKEN = "MTQ1OTgzNjUwNDM4OTE5Mzc3MA.GFPzSu.rU_Z-1xijPDGSY45BSevXnJtbIjw1C5qGxLoHw" 
 
-# Durchschnittliche Marktwerte für Profit-Berechnung
-MARKET_VALUES = {
-    "lacoste": 55.0,
-    "ralph lauren": 50.0,
-    "nike": 40.0,
-    "pashanim": 65.0,
-    "pasha": 65.0,
-    "stussy": 75.0,
-    "carhartt": 45.0
+BOT_NAME = "Costello Sniper by Lias"
+DEFAULT_SHIPPING = 3.50 
+PREFIX = "!" # Befehlszeichen für Discord
+
+MARKET_DATA = {
+    "ralph lauren": 45.0, "lacoste": 50.0, "nike": 35.0, 
+    "stussy": 65.0, "carhartt": 40.0, "stone island": 85.0
 }
 
+VALID_SIZES = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", 
+               "34", "36", "38", "40", "42", "44", "46", "48", "50", 
+               "W30", "W32", "W34", "W36"]
+
+# Deine bestehende Liste (Initial-Daten)
 SUCH_AUFTRÄGE = [
     {"name": "RL Sweater (25)", "webhook": "https://discord.com/api/webhooks/1459968307317833992/872QLyR-kpgt_suLOMMpmHXqIzAvbIr-1UqKf1Oo0wrEnWo6c8bnSWzoSomPcgRep2Dl", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20sweater&price_to=25&order=newest_first"},
-    {"name": "Polo Ralph (50)", "webhook": "https://discord.com/api/webhooks/1460655000974786631/HMrBrLPgM9Eb_Egek7DuMN7IjgL-Q-AsQ6-hC1HvH3H5EJJi2yC76aohCgqt7JW-KU5y", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20polo&price_from=25&price_to=50&order=newest_first"},
-    {"name": "Lacoste Polo (25)", "webhook": "https://discord.com/api/webhooks/1460655105178337434/qh7WM-izSDnT2OIxsXkh2ekJkhRlDif9fasNhIajw_pCPc0LHGEWVi5z2nQokplZ8Ci3", "vinted_url": "https://www.vinted.de/catalog?search_text=Lacoste%20polo&price_to=25&order=newest_first"},
-    {"name": "RL Sweater (50)", "webhook": "https://discord.com/api/webhooks/1460654828807258427/5paOEA0obeueKQo9B7b-6EBromCEAcg-NS682OK6FW1fGkS1cxlyNLIXE0a8OUqmNIiV", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20sweater&price_from=25&price_to=50&order=newest_first"},
-    {"name": "Lacoste Polo (50)", "webhook": "https://discord.com/api/webhooks/1460654610673963071/xga-4p1sxuk4E-gbhkFwvjhMnkr8Yat2HYlv72P_vGQdWsc48wQz6-4HKSEOuTSFOYS_", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20polo&price_from=25&price_to=50&order=newest_first"},
-    {"name": "Lacoste Sweater (50)", "webhook": "https://discord.com/api/webhooks/1460655300750344245/ZAxZomIwH_bF1a8fViRNtvFHs8HVJGabTqYNinlWKNkNTedOVl40Q46_8AkL4Co30StJ", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20sweater&price_from=25&price_to=50&order=newest_first"},
-    {"name": "Lacoste Sweater (25)", "webhook": "https://discord.com/api/webhooks/1460655246857605161/0fFJiGCCC4YBdBr5OoXPTy8w8RTMFtqQVWWS4s1B-T8XSU9MTnarPcIpItBAVC7uYhWY", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20sweater&price_to=25&order=newest_first"},
-    {"name": "Nike Tracksuit (25)", "webhook": "https://discord.com/api/webhooks/1460655532418269306/OYFbbaCBOCIjHBUKTjoHdB60UpA8CX0rb5627Gm4G_MlJfNMmlrM8H8jI14fHY3QqxI6", "vinted_url": "https://www.vinted.de/catalog?search_text=nike%20tracksuits&price_to=25&order=newest_first"},
+    {"name": "Polo Ralph (50)", "webhook": "https://discord.com/api/webhooks/1459968163931230446/hLnQUo6eTVZwVRwk09XjZlfGvxtV66i5gOUibO1K5FPua93iBJM8FyN1S9uzjWBYGeVA", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20polo&price_from=25&price_to=50&order=newest_first"},
+    {"name": "Lacoste Polo (25)", "webhook": "https://discord.com/api/webhooks/1459969267167527116/2oecDcoFw7nRmZ4D04yFEutlWSWE0nfHWm489BrUy6fR8LCbBgxCcTONpZj3HdjT48Pi", "vinted_url": "https://www.vinted.de/catalog?search_text=Lacoste%20polo&price_to=25&order=newest_first"},
+    {"name": "RL Sweater (50)", "webhook": "https://discord.com/api/webhooks/1459968307317833992/872QLyR-kpgt_suLOMMpmHXqIzAvbIr-1UqKf1Oo0wrEnWo6c8bnSWzoSomPcgRep2Dl", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20sweater&price_from=25&price_to=50&order=newest_first"},
+    {"name": "Lacoste Polo (50)", "webhook": "https://discord.com/api/webhooks/1459969054738485416/zVh8AU0GFum7Io7W6RdQCeoY6wDu35kS0yN4tHsQn6Y6s1mNHy8IjlSR6OnNwC081s72", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20polo&price_from=25&price_to=50&order=newest_first"},
+    {"name": "Lacoste Sweater (50)", "webhook": "https://discord.com/api/webhooks/1459969564984086620/hV7o5sAIadVx1TH3JY0h6LqMvrH9JUQfKOpdnD-dGsHO8RXUTbo4vdRwioDV0J1O12EA", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20sweater&price_from=25&price_to=50&order=newest_first"},
+    {"name": "Lacoste Sweater (25)", "webhook": "https://discord.com/api/webhooks/1459969414978867424/loVwVme0cTeyzihMfDPsIjeMw-CbK3JJjf7iQSmRnTqPrOlTyLBMapL6BvkZ-dQqu4py", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20sweater&price_to=25&order=newest_first"},
+    {"name": "Nike Tracksuit (25)", "webhook": "https://discord.com/api/webhooks/1459969714099851397/3LODYIEOh98xOEDHx8SPtR5lbejv7D8ZU6LewRVJGn21pjJxODFfRxqCBZ6WpjAdqeRX", "vinted_url": "https://www.vinted.de/catalog?search_text=nike%20tracksuits&price_to=25&order=newest_first"},
     {"name": "Nike Tracksuit (50)", "webhook": "https://discord.com/api/webhooks/1459969817581715466/l_HmH5J_SDR_FE-m_aoWIKU7x2Qh2FJ3FgBRldPpWwBhrFmMjS6U-DsdLTbLzaWJrboO", "vinted_url": "https://www.vinted.de/catalog?search_text=nike%20track%20suit&price_from=25&price_to=50&order=newest_first"},
-    {"name": "Lacoste Jacke (25)", "webhook": "https://discord.com/api/webhooks/1460655372812550144/3w3_80X3LTXfehz5daa0oemKdw6RcaxZz2VQingdaEgjcS5dGlttKBXUvWIbU-FLWIiN", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20jacke&price_to=25&order=newest_first"},
-    {"name": "Polo Ralph (25)", "webhook": "https://discord.com/api/webhooks/1460654896767434815/TZuVMfoLzB8VMxEbyQqg_1iZ4E68MLOB8ri5gAWX6qO-DLZUf1NpcHEj4EMgANI1Y2kd", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20polo&price_to=25&order=newest_first"},
-    {"name": "Lacoste Jacke (50)", "webhook": "https://discord.com/api/webhooks/1460655442140201123/y_Wv96Joot0wsP4i8IOc5t9y2B9a7nQEwGlMT163rMJ82ZAzGjexx9ykHxR2_vTlSa-g", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20jacke&price_from=25&price_to=50&order=newest_first"},
-    {"name": "Lacoste Jacke (15)", "webhook": "https://discord.com/api/webhooks/1460655726908412035/N1j4pWdDIm6NV9wEIV1G2X2Fao-7ZQUU4ueVP1Fw-l3rNOXsOMgojLy0X_fpl4M3iZw1", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20jacke&price_to=15&order=newest_first"},
-    {"name": "Lacoste Polo (15)", "webhook": "https://discord.com/api/webhooks/1460655671186952387/HRk5xVjzhV1GJ-3RWJS4NC75e0YGY-fyXOMlaFG5Bg7UfQtvVdCqtEVtwWlPmTZn0Har", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20polo&price_to=15&order=newest_first"},
-    {"name": "Ralph Lauren Polo (15)", "webhook": "https://discord.com/api/webhooks/1460655789302612140/wuDR9ww2JU33NBf1ZqSj2wBNkOzinlRpsHLrIfGoD1Dyrht_QBjgmULigYFGQvM8rKHx", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20polo&price_to=15&order=newest_first"},
-    {"name": "Ralph Lauren sweater (15)", "webhook": "https://discord.com/api/webhooks/1460655889454465034/FMY9RdPmHrggia1Cgm9KCHQ9AzBiQILGLtzgneqfBKZ5wBvS6ax63DqqaKmwcRNhcCv9", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20sweater&price_to=15&order=newest_first"},
+    {"name": "Lacoste Jacke (25)", "webhook": "https://discord.com/api/webhooks/1459970054996365433/6TDcNjmKIxCOavCSIw7oSELNvfkFyelWGAqY9nrnLYrjY-kc-CxDrJmzBGuaTNzJ6YOW", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20jacke&price_to=25&order=newest_first"},
+    {"name": "Polo Ralph (25)", "webhook": "https://discord.com/api/webhooks/1459968897259409716/Uhl_qhTtU04X8mUAv6Api_yFrWeV6UgY1bUE-TjImFmOj59agkwiqtqk-bFliUBQG6oX", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20polo&price_to=25&order=newest_first"},
+    {"name": "Lacoste Jacke (50)", "webhook": "https://discord.com/api/webhooks/1459971644113293512/1gNG07NG4JuirBZ0FlK_5OtINnzyW4CJM8QeSPcfJdOMp1Fyb81bV_2FLib0D7SJYIlP", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20jacke&price_from=25&price_to=50&order=newest_first"},
+    {"name": "Lacoste Jacke (15)", "webhook": "https://discord.com/api/webhooks/1459986874905919721/6pjtyAQVF75Zn7ZY4DLNSPUV9U_KFguGKb9cd86D20wNzFnNsTGp4CbCMnblfFk4mzvt", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20jacke&price_to=15&order=newest_first"},
+    {"name": "Lacoste Polo (15)", "webhook": "https://discord.com/api/webhooks/1459985966411551008/ytIBTOlto_8RSqUAZYeBgX3qavbHh23ajC0BJLnIoXgKyKwwQ6OWqmf40BGEeVbHDfGa", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20polo&price_to=15&order=newest_first"},
+    {"name": "Ralph Lauren Polo (15)", "webhook": "https://discord.com/api/webhooks/1459986075668713503/ds3fVhyCvj68yBcuo1fxhvxUn3jdXGxZD_8X4vVYOYWrJ7rfTsmCNpL7WtFdn7hAM1UK", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20polo&price_to=15&order=newest_first"},
+    {"name": "Ralph Lauren sweater (15)", "webhook": "https://discord.com/api/webhooks/1459986179268284447/Xak2iTOVtRmbGwtG5kBjOE35rSa0OnBckKyDNvI4ZkdqvnzoP8In9gcPZfUmDRQrpkYe", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20sweater&price_to=15&order=newest_first"},
     {"name": "Lacoste sweater (15)", "webhook": "https://discord.com/api/webhooks/1459971644113293512/1gNG07NG4JuirBZ0FlK_5OtINnzyW4CJM8QeSPcfJdOMp1Fyb81bV_2FLib0D7SJYIlP", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20sweater&price_to=15&order=newest_first"},
-    {"name": "Pashanim (15)", "webhook": "https://discord.com/api/webhooks/1460274126315982914/m-Vj7rvBdQ0x-ksVoNw9L21IzYYMVDSvyzhfxszW7_DdHZLTzlj31w2RhuYkzlQtIpSW", "vinted_url": "https://www.vinted.de/catalog?search_text=pashanim&price_to=15&order=newest_first"},
-    {"name": "Pasha (15)", "webhook": "https://discord.com/api/webhooks/1460274126315982914/m-Vj7rvBdQ0x-ksVoNw9L21IzYYMVDSvyzhfxszW7_DdHZLTzlj31w2RhuYkzlQtIpSW", "vinted_url": "https://www.vinted.de/catalog?search_text=pasha&price_to=15&order=newest_first"},
-    {"name": "Pashanim (25)", "webhook": "https://discord.com/api/webhooks/1460274208675205120/2XgKnQE_aB3TH9jhvJwZ4SpcCN1Y00-xTjd7Dm6yTh3CXIffqGhSmUk8lynAGeAGr0cC", "vinted_url": "https://www.vinted.de/catalog?search_text=pashanim&price_to=25&order=newest_first"},
-    {"name": "Pasha (25)", "webhook": "https://discord.com/api/webhooks/1460274208675205120/2XgKnQE_aB3TH9jhvJwZ4SpcCN1Y00-xTjd7Dm6yTh3CXIffqGhSmUk8lynAGeAGr0cC", "vinted_url": "https://www.vinted.de/catalog?search_text=pasha&price_to=25&order=newest_first"},
-    {"name": "Pashanim (50)", "webhook": "https://discord.com/api/webhooks/1460274319858073764/gB6Rq-L02mymDD-FiQk7RpU4ZCJUeSI8lv7xYyEzWeIb_H2tHbY79TS62XMHhKdRpUsU", "vinted_url": "https://www.vinted.de/catalog?search_text=pashanim&price_to=50&order=newest_first"},
-    {"name": "Pasha (50)", "webhook": "https://discord.com/api/webhooks/1460274319858073764/gB6Rq-L02mymDD-FiQk7RpU4ZCJUeSI8lv7xYyEzWeIb_H2tHbY79TS62XMHhKdRpUsU", "vinted_url": "https://www.vinted.de/catalog?search_text=pasha&price_to=50&order=newest_first"},
-    {"name": "swaeater (20)", "webhook": "https://discord.com/api/webhooks/1460300613635014901/oHJZSQewPOjZR_VxxdxKsGTKenywTsQ4uI9IpMxhwOVKAjHuxrYSCEM3LT5G2OEh7mHj", "vinted_url": "https://www.vinted.de/catalog?search_text=sweater&price_to=20&brand_ids[]=304&brand_ids[]=677891&brand_ids[]=268734&brand_ids[]=5988006&brand_ids[]=7278799&brand_ids[]=7108764&brand_ids[]=7133888&brand_ids[]=88&brand_ids[]=4273&brand_ids[]=430791&brand_ids[]=442625&brand_ids[]=6962946&order=newest_first"},
+    {"name": "Pashanim (15)", "webhook": "https://discord.com/api/webhooks/1460274126315982914/m-Vj7rvBdQ0x-ksVoNw9L21IzYYMVDSvyzhfxszW7_DdHZLTzlj31w2RhuYkzlQtIpSW", "vinted_url": "https://www.vinted.de/catalog?search_text=pashanim&search_id=30242658961&price_to=15&currency=EUR&page=1&time=1768226668&search_by_image_uuid="},
+    {"name": "Pasha (15)", "webhook": "https://discord.com/api/webhooks/1460274126315982914/m-Vj7rvBdQ0x-ksVoNw9L21IzYYMVDSvyzhfxszW7_DdHZLTzlj31w2RhuYkzlQtIpSW", "vinted_url": "https://www.vinted.de/catalog?search_text=pasha&search_id=30242686295&price_to=15&currency=EUR&page=1&time=1768226805&search_by_image_uuid="},
+    {"name": "Pashanim (25)", "webhook": "https://discord.com/api/webhooks/1460274208675205120/2XgKnQE_aB3TH9jhvJwZ4SpcCN1Y00-xTjd7Dm6yTh3CXIffqGhSmUk8lynAGeAGr0cC", "vinted_url": "https://www.vinted.de/catalog?search_text=pashanim&search_id=30242658961&price_to=25&currency=EUR&page=1&time=1768226668&search_by_image_uuid="},
+    {"name": "Pasha (25)", "webhook": "https://discord.com/api/webhooks/1460274208675205120/2XgKnQE_aB3TH9jhvJwZ4SpcCN1Y00-xTjd7Dm6yTh3CXIffqGhSmUk8lynAGeAGr0cC", "vinted_url": "https://www.vinted.de/catalog?search_text=pasha&search_id=30242686295&price_to=25&currency=EUR&page=1&time=1768226805&search_by_image_uuid="},
+    {"name": "Pashanim (50)", "webhook": "https://discord.com/api/webhooks/1460274319858073764/gB6Rq-L02mymDD-FiQk7RpU4ZCJUeSI8lv7xYyEzWeIb_H2tHbY79TS62XMHhKdRpUsU", "vinted_url": "https://www.vinted.de/catalog?search_text=pashanim&search_id=30242658961&price_to=50&currency=EUR&page=1&time=1768226668&search_by_image_uuid="},
+    {"name": "Pasha (50)", "webhook": "https://discord.com/api/webhooks/1460274319858073764/gB6Rq-L02mymDD-FiQk7RpU4ZCJUeSI8lv7xYyEzWeIb_H2tHbY79TS62XMHhKdRpUsU", "vinted_url": "https://www.vinted.de/catalog?search_text=pasha&search_id=30242686295&price_to=50&currency=EUR&page=1&time=1768226805&search_by_image_uuid="},
+    {"name": "Pashanim (50)", "webhook": "https://discord.com/api/webhooks/1460274671911043164/iXA8iLmk8hBdEiuzfD0k8VvugYcV5IlWZHcw2aoOx06YyVifTu5GxZMndLpFNO6iVAiq", "vinted_url": "https://www.vinted.de/catalog?search_by_image_uuid=&search_text=pasha&page=1&search_id=30242831825&time=1768226959"},
+    {"name": "Pasha (50)", "webhook": "https://discord.com/api/webhooks/1460274671911043164/iXA8iLmk8hBdEiuzfD0k8VvugYcV5IlWZHcw2aoOx06YyVifTu5GxZMndLpFNO6iVAiq", "vinted_url": "https://www.vinted.de/catalog?search_by_image_uuid=&search_text=pashanim&page=1&search_id=30242848685&time=1768227000"},
+    {"name": "swaeater (20)", "webhook": "https://discord.com/api/webhooks/1460300613635014901/oHJZSQewPOjZR_VxxdxKsGTKenywTsQ4uI9IpMxhwOVKAjHuxrYSCEM3LT5G2OEh7mHj", "vinted_url": "https://www.vinted.de/catalog?search_text=sweater&search_id=30245465917&price_to=20&currency=EUR&page=1&time=1768233128&search_by_image_uuid=&brand_ids[]=304&brand_ids[]=677891&brand_ids[]=268734&brand_ids[]=5988006&brand_ids[]=7278799&brand_ids[]=7108764&brand_ids[]=7133888&brand_ids[]=88&brand_ids[]=4273&brand_ids[]=430791&brand_ids[]=442625&brand_ids[]=6962946"},
     {"name": "Lacoste Polo L (15)", "webhook": "https://discord.com/api/webhooks/1460230213391614076/fwXUTreF8vrgHZei7QFGHkxd_6OgVz-Biq6-aF9Ur4kNRLj7CWWjSX0WEZ6UnrSmH3on", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20polo&price_to=15&size_id[]=3&order=newest_first"},
     {"name": "Lacoste Polo L (25)", "webhook": "https://discord.com/api/webhooks/1460231377122492524/V0yRgLRQRgW3VEf-STsQmWl2xvZNyGWGUDMz5U5RdkTNS9XSo-7QlwLWQrXw3NOx8CML", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20polo&price_from=15&price_to=25&size_id[]=3&order=newest_first"},
     {"name": "Lacoste Polo L (50)", "webhook": "https://discord.com/api/webhooks/1460231479534555137/d5fjuAP9n0lHbbKj4wciZCoz2YE8M379nptE_DykdD8Ap2R1HCTXCo-aNA51yowhOXvJ", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20polo&price_from=25&price_to=50&size_id[]=3&order=newest_first"},
@@ -72,88 +79,198 @@ SUCH_AUFTRÄGE = [
     {"name": "Nike Tracksuit L (50)", "webhook": "https://discord.com/api/webhooks/1460232814648623176/DIQDbWT2n_WxxFHUXJ9C6BgOdXVgxkTLmxvAQh4I6BRj2ZaK_xNbw01BQIL11OwBNadx", "vinted_url": "https://www.vinted.de/catalog?search_text=nike%20tracksuit&price_from=25&price_to=50&size_id[]=3&order=newest_first"}
 ]
 
+seen_items = set()
+
+# =================================================================
+# SETUP DRIVER
+# =================================================================
 def create_driver():
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("window-size=1920,1080")
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-    return driver
+    options.add_argument("window-size=2560,1440")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
+    return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
-def send_deal(webhook_url, name, price_val, size, img_url, item_url):
-    market_val = 50.0 # Standard
-    for brand, val in MARKET_VALUES.items():
-        if brand in name.lower():
-            market_val = val
-            break
-    
-    total_cost = price_val + SHIPPING
-    profit = market_val - total_cost
+driver = create_driver()
 
-    webhook = DiscordWebhook(url=webhook_url, username=BOT_NAME, avatar_url=BOT_AVATAR)
-    embed = DiscordEmbed(title=f"📦 {name}", color='2ecc71', url=item_url)
-    embed.add_embed_field(name='📏 GRÖSSE', value=f"**{size}**", inline=True)
-    embed.add_embed_field(name='🏷️ ARTIKEL', value=f"**{price_val:.2f}€**", inline=True)
-    embed.add_embed_field(name='🚚 VERSAND', value=f"**{SHIPPING}€**", inline=True)
-    embed.add_embed_field(name='💰 GESAMT', value=f"**{total_cost:.2f}€**", inline=True)
-    embed.add_embed_field(name='📈 PROFIT', value=f"**{profit:.2f}€**", inline=True)
-    
-    if img_url: embed.set_image(url=img_url)
-    embed.set_footer(text="Costello Sniper • Live Updates")
-    webhook.add_embed(embed)
-    webhook.execute()
+# =================================================================
+# DISCORD BOT EVENTS & BEFEHLE
+# =================================================================
+intents = discord.Intents.default()
+intents.message_content = True # Wichtig für Befehle
+bot = commands.Bot(command_prefix=PREFIX, intents=intents)
 
-def start_bot():
-    start_time = time.time()
-    driver = create_driver()
-    seen_ids = set()
-    first_run = True
-    
-    print("🚀 Starte Costello Sniper mit allen 42 Aufträgen...")
-    
-    while True:
-        if time.time() - start_time > MAX_RUN_TIME: break
+@bot.event
+async def on_ready():
+    print(f"🤖 Bot eingeloggt als {bot.user.name}")
+    print("🚀 Starte Sniper-Loop...")
+    if not sniper_loop.is_running():
+        sniper_loop.start()
+
+# --- BEFEHL 1: Neuen Channel + Webhook + Suche erstellen ---
+# Nutzung: !new "channel-name" "vinted-url"
+@bot.command(name="new")
+@commands.has_permissions(manage_channels=True, manage_webhooks=True)
+async def new_search(ctx, channel_name: str, vinted_url: str):
+    try:
+        # 1. Channel erstellen
+        guild = ctx.guild
+        category = ctx.channel.category # Im selben Bereich erstellen wie der Befehl
+        new_channel = await guild.create_text_channel(name=channel_name, category=category)
         
-        for auftrag in SUCH_AUFTRÄGE:
+        # 2. Webhook erstellen
+        webhook = await new_channel.create_webhook(name="Sniper-Hook")
+        
+        # 3. Zur Liste hinzufügen
+        SUCH_AUFTRÄGE.append({
+            "name": channel_name,
+            "webhook": webhook.url,
+            "vinted_url": vinted_url
+        })
+        
+        await ctx.send(f"✅ Kanal {new_channel.mention} erstellt und Suche gestartet!")
+        await new_channel.send(f"🔭 **Sniper aktiv** für: {vinted_url}")
+        
+    except Exception as e:
+        await ctx.send(f"❌ Fehler: {e}")
+
+# --- BEFEHL 2: Suche zum aktuellen Channel hinzufügen ---
+# Nutzung: !add "Name der Suche" "vinted-url"
+@bot.command(name="add")
+@commands.has_permissions(manage_webhooks=True)
+async def add_search(ctx, name: str, vinted_url: str):
+    try:
+        # Prüfen ob Webhook existiert, sonst erstellen
+        webhooks = await ctx.channel.webhooks()
+        if webhooks:
+            webhook_url = webhooks[0].url
+        else:
+            webhook = await ctx.channel.create_webhook(name="Sniper-Hook")
+            webhook_url = webhook.url
+            
+        SUCH_AUFTRÄGE.append({
+            "name": name,
+            "webhook": webhook_url,
+            "vinted_url": vinted_url
+        })
+        
+        await ctx.send(f"✅ Suche **{name}** zu diesem Kanal hinzugefügt!")
+        
+    except Exception as e:
+        await ctx.send(f"❌ Fehler: {e}")
+
+# =================================================================
+# SNIPER LOOP (Läuft im Hintergrund)
+# =================================================================
+@tasks.loop(seconds=5) # Pause zwischen Durchläufen
+async def sniper_loop():
+    global driver
+    # Wir iterieren durch alle Aufträge
+    for auftrag in SUCH_AUFTRÄGE:
+        try:
+            # Selenium ist blockierend, daher müssen wir vorsichtig sein.
+            # In einem perfekten Bot würde man das in einen Thread auslagern, 
+            # aber für deine Zwecke reicht es so, solange die Vinted-Antwort schnell kommt.
+            
+            driver.get(auftrag['vinted_url'])
+            
+            # Kurzer Wait
             try:
-                driver.get(auftrag['vinted_url'])
-                time.sleep(4)
-                items = driver.find_elements(By.CSS_SELECTOR, "[data-testid^='product-item']")
+                WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'feed-grid__item')]")))
+            except:
+                continue # Nächster Auftrag wenn nichts lädt
 
-                for item in items[:5]:
-                    try:
-                        href = item.find_element(By.TAG_NAME, "a").get_attribute("href")
-                        item_id = href.split("/")[-1].split("-")[0]
+            items = driver.find_elements(By.XPATH, "//div[contains(@class, 'feed-grid__item')]")
 
-                        if item_id in seen_ids: continue
-                        seen_ids.add(item_id)
-                        if first_run: continue
+            for item in items[:5]:
+                try:
+                    url_elem = item.find_element(By.TAG_NAME, "a")
+                    url = url_elem.get_attribute("href")
+                    if not url or "items" not in url: continue
+                    
+                    item_id = url.split("/")[-1].split("-")[0]
+                    if item_id in seen_items: continue
+                    seen_items.add(item_id)
 
-                        raw_text = item.text.replace(",", ".")
-                        price_match = re.search(r"(\d+\.\d+)€", raw_text)
-                        price_val = float(price_match.group(1)) if price_match else 0.0
-                        
-                        size = "N/A"
-                        for s in ["XXS", "XS", "S", "M", "L", "XL", "XXL"]:
-                            if f"\n{s}\n" in item.text:
-                                size = s
+                    # --- TEXTANALYSE (Deine Logik) ---
+                    full_text_block = item.text
+                    lines = [line.strip() for line in full_text_block.split('\n') if line.strip()]
+
+                    artikel_preis = 0.0
+                    groesse = "-"
+                    versand_preis = DEFAULT_SHIPPING
+
+                    # Preis
+                    for line in lines:
+                        if "€" in line and "VERSAND" not in line.upper():
+                            match = re.search(r"(\d+[,.]\d+)", line)
+                            if match:
+                                artikel_preis = float(match.group(1).replace(",", "."))
+                                break
+                    
+                    # Größe
+                    for line in lines:
+                        clean = line.upper().strip()
+                        if clean in VALID_SIZES:
+                            groesse = clean; break
+                    
+                    if groesse == "-":
+                        full_upper = full_text_block.upper()
+                        for s in VALID_SIZES:
+                            if re.search(rf"(^|\s|/){s}($|\s|/)", full_upper):
+                                groesse = s; break
+                    
+                    # Versand
+                    for line in lines:
+                        if "€" in line and "VERSAND" in line.upper():
+                            match = re.search(r"(\d+[,.]\d+)", line)
+                            if match:
+                                versand_preis = float(match.group(1).replace(",", "."))
                                 break
 
-                        try: img = item.find_element(By.TAG_NAME, "img").get_attribute("src")
-                        except: img = None
+                    # Berechnung
+                    fee = round(0.70 + (artikel_preis * 0.05), 2)
+                    total = round(artikel_preis + fee + versand_preis, 2)
+                    
+                    marktwert = 20.0
+                    for brand, val in MARKET_DATA.items():
+                        if brand in url.lower(): marktwert = val; break
+                    profit = round(marktwert - total, 2)
 
-                        send_deal(auftrag['webhook'], auftrag['name'], price_val, size, img, href)
-                    except: continue
-            except: continue
-        
-        if first_run:
-            print("🏁 Erst-Scan fertig. Bot ist jetzt im Sniper-Modus!")
-            first_run = False
-        time.sleep(10)
+                    if artikel_preis > 0:
+                        webhook = DiscordWebhook(url=auftrag['webhook'], username=BOT_NAME)
+                        embed = DiscordEmbed(title=f"📦 {auftrag['name']}", color='2ecc71', url=url)
+                        
+                        embed.add_embed_field(name='📏 GRÖSSE', value=f"**{groesse}**", inline=True)
+                        embed.add_embed_field(name='🏷️ ARTIKEL', value=f"{artikel_preis}€", inline=True)
+                        embed.add_embed_field(name='🚚 VERSAND', value=f"{versand_preis}€", inline=True)
+                        embed.add_embed_field(name='💰 GESAMT', value=f"**{total}€**", inline=True)
+                        embed.add_embed_field(name='📊 PROFIT', value=f"**{profit}€**", inline=True)
 
+                        try:
+                            img = item.find_element(By.TAG_NAME, "img").get_attribute("src")
+                            if img: embed.set_image(url=img)
+                        except: pass
+
+                        webhook.add_embed(embed)
+                        webhook.execute()
+                        print(f"✅ Gesendet: {auftrag['name']} - {item_id}")
+
+                except Exception as e:
+                    continue
+            
+            # Kleiner Sleep um CPU zu schonen und Event Loop Luft zu geben
+            await asyncio.sleep(1) 
+
+        except Exception as e:
+            print(f"Loop Fehler: {e}")
+            try:
+                driver.quit()
+                driver = create_driver()
+            except: pass
+
+# Bot starten
 if __name__ == "__main__":
-    start_bot()
+    bot.run(BOT_TOKEN)
