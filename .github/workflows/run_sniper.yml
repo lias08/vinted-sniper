@@ -1,14 +1,16 @@
 name: Vinted Sniper
 
-# Das hier stoppt die Verdopplung:
+# Verhindert, dass der Bot mehrfach gleichzeitig läuft
 concurrency:
-  group: sniper-group
+  group: sniper-vinted-group
   cancel-in-progress: true 
 
 on:
-  workflow_dispatch:      # Manuell starten
-  # schedule:             # Cron am besten auskommentieren, wenn der Bot endlos läuft
-  #   - cron: '0 0 * * *' # Startet z.B. nur 1x täglich neu als Sicherheit
+  workflow_dispatch:      # Ermöglicht manuellen Start per Button
+  push:
+    branches: [ main ]    # Startet automatisch bei Code-Änderungen
+  schedule:
+    - cron: '*/15 * * * *' # Startet alle 15 Minuten (GitHub Free Limit)
 
 jobs:
   snipe:
@@ -29,11 +31,12 @@ jobs:
           sudo apt-get install -y google-chrome-stable
           sudo apt-get install -y xvfb
 
-      - name: Install Python Dependencies
+      - name: Install Dependencies
         run: |
-          pip install discord.py selenium webdriver-manager discord-webhook
+          pip install selenium webdriver-manager discord-webhook
 
       - name: Run Sniper Bot
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        # xvfb-run simuliert einen Bildschirm, damit der Browser im Hintergrund arbeiten kann
         run: xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" python sniper.py
