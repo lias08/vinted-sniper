@@ -1,21 +1,18 @@
 import time
 import re
 import threading
-import random
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from discord_webhook import DiscordWebhook, DiscordEmbed
 
 # =================================================================
-# KONFIGURATION
+# KONFIGURATION & MARKTWERTE (Für Profit-Berechnung)
 # =================================================================
-BOT_NAME = "Costello Ultimate"
-DEFAULT_SHIPPING = 4.99 # Sicherheits-Fallback
+BOT_NAME = "Costello Sniper"
+DEFAULT_SHIPPING = 4.99
 
 MARKET_DATA = {
     "ralph lauren": 45.0, "lacoste": 50.0, "nike": 35.0, 
@@ -77,164 +74,100 @@ SUCH_AUFTRÄGE = [
     {"name": "Nike Tracksuit L (50)", "webhook": "https://discord.com/api/webhooks/1460232814648623176/DIQDbWT2n_WxxFHUXJ9C6BgOdXVgxkTLmxvAQh4I6BRj2ZaK_xNbw01BQIL11OwBNadx", "vinted_url": "https://www.vinted.de/catalog?search_text=nike%20tracksuit&price_from=25&price_to=50&size_id[]=3&order=newest_first"}
 ]
 
-def create_driver():
+def create_fast_driver():
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1920,1080")
-    # WICHTIG: User-Agent setzen, damit Vinted uns nicht sofort blockt
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-    options.add_experimental_option("prefs", {"profile.managed_default_content_settings.images": 2})
-    return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    options.add_argument("--blink-settings=imagesEnabled=false") # Bilder aus für Speed
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    driver.set_page_load_timeout(10)
+    return driver
 
-def extract_price_from_meta(driver):
-    """Liest den Preis aus den versteckten Meta-Daten, nicht vom Bildschirm"""
+def quick_process_item(url, auftrag):
+    """Extrahiert alle Infos blitzschnell und sendet das Embed"""
+    temp_driver = create_fast_driver()
     try:
-        # Versuch 1: Meta Product Price
-        elem = driver.find_element(By.XPATH, "//meta[@property='product:price:amount']")
-        return float(elem.get_attribute("content"))
-    except:
-        pass
+        temp_driver.get(url)
+        html = temp_driver.page_source
         
-    try:
-        # Versuch 2: JSON Script Data (Regex im HTML Quelltext)
-        html = driver.page_source
-        match = re.search(r'"price_numeric":\s*"(\d+[.,]?\d*)"', html)
-        if match:
-            return float(match.group(1).replace(",", "."))
-    except:
-        pass
-
-    # Fallback: Body Text Suche
-    try:
-        text = driver.find_element(By.TAG_NAME, "body").text
-        # Suche nach "15,00 €" Muster
-        match = re.search(r'(\d+[,.]\d{2})\s?€', text)
-        if match:
-             return float(match.group(1).replace(",", "."))
-    except:
-        pass
+        # 1. Preis & Bild via Meta-Tags (extrem schnell)
+        p_match = re.search(r'property="product:price:amount" content="(\d+\.?\d*)"', html)
+        preis = float(p_match.group(1)) if p_match else 0.0
         
-    return 0.0
+        i_match = re.search(r'property="og:image" content="(.*?)"', html)
+        img_url = i_match.group(1) if i_match else ""
 
-def extract_shipping(driver):
-    """Versucht Versandkosten intelligent zu finden"""
-    try:
-        # Suche nach Texten, die "Versand" enthalten und eine Zahl haben
-        body_text = driver.find_element(By.TAG_NAME, "body").text
-        # Suche nach Zeilen wie "Versand ab 3,99 €" oder "Versand: 2.50 €"
-        matches = re.findall(r'(?:Versand|Shipping).*?(\d+[,.]\d{2})', body_text, re.IGNORECASE)
-        if matches:
-            # Nimm den ersten gefundenen Wert
-            return float(matches[0].replace(",", "."))
+        # 2. Versand & Größe via Text-Regex
+        v_match = re.search(r'(?:Versand|Shipping).*?(\d+[,.]\d{2})', html)
+        versand = float(v_match.group(1).replace(",", ".")) if v_match else DEFAULT_SHIPPING
+        
+        # Größe finden
+        groesse = "N/A"
+        for s in ["XXS", "XS", "S", "M", "L", "XL", "XXL"]:
+            if f'content="{s}"' in html or f'>{s}<' in html:
+                groesse = s
+                break
+
+        if preis > 0:
+            # 3. Berechnungen
+            gebuehr = round(0.70 + (preis * 0.05), 2)
+            total = round(preis + gebuehr + versand, 2)
+            
+            marktwert = 25.0
+            for brand, val in MARKET_DATA.items():
+                if brand.lower() in auftrag['name'].lower():
+                    marktwert = val
+                    break
+            profit = round(marktwert - total, 2)
+
+            # 4. Discord Senden (Exakt wie auf deinem Bild)
+            webhook = DiscordWebhook(url=auftrag['webhook'], username=BOT_NAME)
+            color = '2ecc71' if profit > 0 else 'e74c3c' # Grün bei Gewinn, Rot bei Verlust
+            
+            embed = DiscordEmbed(title=f"📦 {auftrag['name']}", color=color, url=url)
+            embed.add_embed_field(name='📏 Größe', value=f"**{groesse}**", inline=True)
+            embed.add_embed_field(name='💰 Preis', value=f"{preis}€", inline=True)
+            embed.add_embed_field(name='🚚 Versand', value=f"{versand}€", inline=True)
+            embed.add_embed_field(name='💳 TOTAL', value=f"**{total}€**", inline=True)
+            embed.add_embed_field(name='📈 Profit', value=f"**{profit}€**", inline=True)
+            
+            if img_url: embed.set_image(url=img_url)
+
+            webhook.add_embed(embed)
+            webhook.execute()
+            print(f"✅ Gesendet: {auftrag['name']} für {preis}€")
+
     except: pass
-    
-    return DEFAULT_SHIPPING
+    finally: temp_driver.quit()
 
 def scan_task(auftrag):
-    driver = create_driver()
+    driver = create_fast_driver()
     seen_items = set()
-    print(f"🔍 Starte: {auftrag['name']}")
-
     while True:
         try:
             driver.get(auftrag['vinted_url'])
-            # Warte kurz, dass Feed lädt
-            time.sleep(3) 
+            links = driver.find_elements(By.XPATH, "//div[contains(@class, 'feed-grid__item')]//a")
             
-            items = driver.find_elements(By.XPATH, "//div[contains(@class, 'feed-grid__item')]//a")
-            # Filtere leere Links raus
-            valid_items = [i.get_attribute("href") for i in items if i.get_attribute("href") and "/items/" in i.get_attribute("href")]
-
-            # Nur die ersten 3 prüfen (Speed!)
-            for url in valid_items[:3]:
-                item_id = url.split("/")[-1].split("-")[0]
-                if item_id in seen_items: continue
-                seen_items.add(item_id)
-
-                print(f"👀 Prüfe Details: {url}")
-                try:
-                    driver.get(url)
-                    time.sleep(2) # Seite laden lassen
-                    
-                    # --- DATEN AUSLESEN (Neue Methode) ---
-                    preis = extract_price_from_meta(driver)
-                    
-                    if preis == 0.0:
-                        print(f"❌ Kein Preis gefunden für {url} (Vinted Block?)")
-                        continue
-
-                    versand = extract_shipping(driver)
-                    
-                    # Größe aus Titel/Beschreibung raten
-                    page_title = driver.title
-                    groesse = "N/A"
-                    for s in ["XXS", "XS", "S", "M", "L", "XL", "XXL", "3XL"]:
-                        if f" {s} " in page_title or f"/{s} " in page_title:
-                            groesse = s
-                            break
-                    
-                    # Rechnung
-                    gebuehr = round(0.70 + (preis * 0.05), 2)
-                    total = round(preis + gebuehr + versand, 2)
-                    
-                    marktwert = 25.0
-                    for brand, val in MARKET_DATA.items():
-                        if brand.lower() in auftrag['name'].lower():
-                            marktwert = val
-                            break
-                    
-                    profit = round(marktwert - total, 2)
-                    
-                    # Bild
-                    img_url = ""
-                    try:
-                        # Meta Image ist meist höher aufgelöst
-                        img_elem = driver.find_element(By.XPATH, "//meta[@property='og:image']")
-                        img_url = img_elem.get_attribute("content")
-                    except: pass
-
-                    # Discord
-                    webhook = DiscordWebhook(url=auftrag['webhook'], username=BOT_NAME)
-                    color = '2ecc71' if profit > 5 else 'e74c3c'
-                    
-                    embed = DiscordEmbed(title=f"📦 {auftrag['name']}", color=color, url=url)
-                    embed.add_embed_field(name='📏 Größe', value=f"**{groesse}**", inline=True)
-                    embed.add_embed_field(name='💰 Preis', value=f"{preis}€", inline=True)
-                    embed.add_embed_field(name='🚚 Versand', value=f"{versand}€", inline=True)
-                    embed.add_embed_field(name='💳 TOTAL', value=f"**{total}€**", inline=True)
-                    embed.add_embed_field(name='📈 Profit', value=f"**{profit}€**", inline=True)
-                    
-                    if img_url: embed.set_image(url=img_url)
-
-                    webhook.add_embed(embed)
-                    webhook.execute()
-                    print(f"✅ Gesendet: {preis}€")
-
-                except Exception as e:
-                    print(f"Fehler bei Einzel-Item: {e}")
-                    continue
-
-        except Exception as e:
-            print(f"⚠️ Haupt-Loop Fehler in {auftrag['name']}: {e}")
-            try: driver.quit()
-            except: pass
-            driver = create_driver()
-            time.sleep(10)
+            for link in links[:3]: # Prüfe die neuesten 3
+                url = link.get_attribute("href")
+                if url and "/items/" in url:
+                    item_id = url.split("/")[-1].split("-")[0]
+                    if item_id not in seen_items:
+                        seen_items.add(item_id)
+                        # Sofortiger Hintergrund-Thread für dieses Item
+                        threading.Thread(target=quick_process_item, args=(url, auftrag)).start()
+            
+            time.sleep(1.5)
+        except: time.sleep(5)
 
 def start_bot():
-    print("🔥 COSTELLO META-SNIPER GESTARTET")
-    threads = []
+    print(f"🚀 {BOT_NAME} GESTARTET - {len(SUCH_AUFTRÄGE)} AUFTRÄGE AKTIV")
     for a in SUCH_AUFTRÄGE:
-        t = threading.Thread(target=scan_task, args=(a,))
-        t.daemon = True
-        t.start()
-        threads.append(t)
-        time.sleep(2) 
-
-    while True:
-        time.sleep(10)
+        threading.Thread(target=scan_task, args=(a,), daemon=True).start()
+        time.sleep(0.5)
+    while True: time.sleep(10)
 
 if __name__ == "__main__":
     start_bot()
