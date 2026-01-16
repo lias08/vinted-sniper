@@ -1,6 +1,7 @@
 import time
 import re
 import threading
+import random
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -13,8 +14,8 @@ from discord_webhook import DiscordWebhook, DiscordEmbed
 # =================================================================
 # KONFIGURATION
 # =================================================================
-BOT_NAME = "Costello Precision Sniper"
-DEFAULT_SHIPPING_FALLBACK = 4.50 # Nur falls Vinted gar nichts anzeigt
+BOT_NAME = "Costello Ultimate"
+DEFAULT_SHIPPING = 4.99 # Sicherheits-Fallback
 
 MARKET_DATA = {
     "ralph lauren": 45.0, "lacoste": 50.0, "nike": 35.0, 
@@ -22,7 +23,6 @@ MARKET_DATA = {
     "pashanim": 40.0, "pasha": 40.0, "sweater": 30.0
 }
 
-# Deine Suchaufträge
 SUCH_AUFTRÄGE = [
     # --- RALPH LAUREN ---
     {"name": "RL Sweater (25)", "webhook": "https://discord.com/api/webhooks/1459964198363725908/RjvrERJNQ-iaKShFmMhVHaVfcBN3Td8JfwwCsDc2pQMXWm7vcOu3iH4982wjVBQK9kEF", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20sweater&price_to=25&order=newest_first"},
@@ -82,17 +82,55 @@ def create_driver():
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    # Bilder aus, um Ladezeit zu minimieren
+    options.add_argument("--window-size=1920,1080")
+    # WICHTIG: User-Agent setzen, damit Vinted uns nicht sofort blockt
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     options.add_experimental_option("prefs", {"profile.managed_default_content_settings.images": 2})
     return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
-def extract_number(text):
-    """Hilfsfunktion: Findet Komma-Zahlen in Texten"""
-    if not text: return 0.0
-    match = re.search(r"(\d+[,.]\d+)", text)
-    if match:
-        return float(match.group(1).replace(",", "."))
+def extract_price_from_meta(driver):
+    """Liest den Preis aus den versteckten Meta-Daten, nicht vom Bildschirm"""
+    try:
+        # Versuch 1: Meta Product Price
+        elem = driver.find_element(By.XPATH, "//meta[@property='product:price:amount']")
+        return float(elem.get_attribute("content"))
+    except:
+        pass
+        
+    try:
+        # Versuch 2: JSON Script Data (Regex im HTML Quelltext)
+        html = driver.page_source
+        match = re.search(r'"price_numeric":\s*"(\d+[.,]?\d*)"', html)
+        if match:
+            return float(match.group(1).replace(",", "."))
+    except:
+        pass
+
+    # Fallback: Body Text Suche
+    try:
+        text = driver.find_element(By.TAG_NAME, "body").text
+        # Suche nach "15,00 €" Muster
+        match = re.search(r'(\d+[,.]\d{2})\s?€', text)
+        if match:
+             return float(match.group(1).replace(",", "."))
+    except:
+        pass
+        
     return 0.0
+
+def extract_shipping(driver):
+    """Versucht Versandkosten intelligent zu finden"""
+    try:
+        # Suche nach Texten, die "Versand" enthalten und eine Zahl haben
+        body_text = driver.find_element(By.TAG_NAME, "body").text
+        # Suche nach Zeilen wie "Versand ab 3,99 €" oder "Versand: 2.50 €"
+        matches = re.findall(r'(?:Versand|Shipping).*?(\d+[,.]\d{2})', body_text, re.IGNORECASE)
+        if matches:
+            # Nimm den ersten gefundenen Wert
+            return float(matches[0].replace(",", "."))
+    except: pass
+    
+    return DEFAULT_SHIPPING
 
 def scan_task(auftrag):
     driver = create_driver()
@@ -101,80 +139,45 @@ def scan_task(auftrag):
 
     while True:
         try:
-            # 1. Übersichtsseite laden
             driver.get(auftrag['vinted_url'])
-            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'feed-grid__item')]")))
+            # Warte kurz, dass Feed lädt
+            time.sleep(3) 
             
-            # Wir speichern zuerst nur die Links der neuesten 5 Items
-            found_links = []
-            grid_items = driver.find_elements(By.XPATH, "//div[contains(@class, 'feed-grid__item')]")
-            
-            for item in grid_items[:5]:
+            items = driver.find_elements(By.XPATH, "//div[contains(@class, 'feed-grid__item')]//a")
+            # Filtere leere Links raus
+            valid_items = [i.get_attribute("href") for i in items if i.get_attribute("href") and "/items/" in i.get_attribute("href")]
+
+            # Nur die ersten 3 prüfen (Speed!)
+            for url in valid_items[:3]:
+                item_id = url.split("/")[-1].split("-")[0]
+                if item_id in seen_items: continue
+                seen_items.add(item_id)
+
+                print(f"👀 Prüfe Details: {url}")
                 try:
-                    url_elem = item.find_element(By.TAG_NAME, "a")
-                    url = url_elem.get_attribute("href")
-                    if not url or "items" not in url: continue
+                    driver.get(url)
+                    time.sleep(2) # Seite laden lassen
                     
-                    item_id = url.split("/")[-1].split("-")[0]
-                    if item_id not in seen_items:
-                        seen_items.add(item_id)
-                        found_links.append(url)
-                except: continue
+                    # --- DATEN AUSLESEN (Neue Methode) ---
+                    preis = extract_price_from_meta(driver)
+                    
+                    if preis == 0.0:
+                        print(f"❌ Kein Preis gefunden für {url} (Vinted Block?)")
+                        continue
 
-            # 2. Wenn neue Items gefunden wurden, DETAILS LADEN (Item öffnen)
-            for url in found_links:
-                try:
-                    print(f"👀 Prüfe Details: {url}")
-                    driver.get(url) # Gehe auf die Produktseite
+                    versand = extract_shipping(driver)
                     
-                    # Warten bis Preis sichtbar ist
-                    WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'item-description')]")))
-                    
-                    page_source = driver.page_source.upper()
-                    
-                    # A. PREIS FINDEN (Meist in einem H1 oder speziellen Div)
-                    # Wir suchen nach dem ersten Preis-Tag
-                    preis = 0.0
-                    try:
-                        price_elem = driver.find_element(By.XPATH, "//div[contains(@class, 'title-content')]//span[@data-testid='item-price']")
-                        preis = extract_number(price_elem.text)
-                    except:
-                        # Fallback: Suche im gesamten Text nach "X,XX €"
-                        preis = extract_number(driver.find_element(By.TAG_NAME, "h1").text)
-
-                    if preis == 0.0: continue # Skip if fails
-
-                    # B. VERSAND FINDEN
-                    versand_preis = 0.0
-                    try:
-                        # Suche nach Texten wie "Versand: 3,79 €"
-                        # Vinted Struktur ändert sich oft, daher suchen wir Text-basiert im Body
-                        shipping_blocks = driver.find_elements(By.XPATH, "//*[contains(text(), 'Versand') or contains(text(), 'Shipping')]")
-                        for block in shipping_blocks:
-                            txt = block.text
-                            if "€" in txt:
-                                v_p = extract_number(txt)
-                                if v_p > 0:
-                                    versand_preis = v_p
-                                    break
-                    except: pass
-                    
-                    if versand_preis == 0.0:
-                        versand_preis = DEFAULT_SHIPPING_FALLBACK
-
-                    # C. GRÖSSE & MARKE
+                    # Größe aus Titel/Beschreibung raten
+                    page_title = driver.title
                     groesse = "N/A"
-                    # Versuche Details aus der Tabelle zu lesen
-                    try:
-                        details = driver.find_elements(By.XPATH, "//div[@class='details-list__item']")
-                        for d in details:
-                            if "GRÖSSE" in d.text.upper() or "SIZE" in d.text.upper():
-                                groesse = d.text.split("\n")[-1]
-                    except: pass
-
-                    # D. BERECHNUNG
+                    for s in ["XXS", "XS", "S", "M", "L", "XL", "XXL", "3XL"]:
+                        if f" {s} " in page_title or f"/{s} " in page_title:
+                            groesse = s
+                            break
+                    
+                    # Rechnung
                     gebuehr = round(0.70 + (preis * 0.05), 2)
-                    total = round(preis + gebuehr + versand_preis, 2)
+                    total = round(preis + gebuehr + versand, 2)
                     
                     marktwert = 25.0
                     for brand, val in MARKET_DATA.items():
@@ -184,22 +187,22 @@ def scan_task(auftrag):
                     
                     profit = round(marktwert - total, 2)
                     
-                    # Bild holen (auf Produktseite einfacher)
+                    # Bild
                     img_url = ""
                     try:
-                        img_elem = driver.find_element(By.XPATH, "//div[@class='item-photo--1']//img")
-                        img_url = img_elem.get_attribute("src")
+                        # Meta Image ist meist höher aufgelöst
+                        img_elem = driver.find_element(By.XPATH, "//meta[@property='og:image']")
+                        img_url = img_elem.get_attribute("content")
                     except: pass
 
-                    # --- SENDEN ---
+                    # Discord
                     webhook = DiscordWebhook(url=auftrag['webhook'], username=BOT_NAME)
                     color = '2ecc71' if profit > 5 else 'e74c3c'
                     
                     embed = DiscordEmbed(title=f"📦 {auftrag['name']}", color=color, url=url)
                     embed.add_embed_field(name='📏 Größe', value=f"**{groesse}**", inline=True)
                     embed.add_embed_field(name='💰 Preis', value=f"{preis}€", inline=True)
-                    embed.add_embed_field(name='🚚 Versand', value=f"{versand_preis}€", inline=True)
-                    embed.add_embed_field(name='🧾 Gebühr', value=f"{gebuehr}€", inline=True)
+                    embed.add_embed_field(name='🚚 Versand', value=f"{versand}€", inline=True)
                     embed.add_embed_field(name='💳 TOTAL', value=f"**{total}€**", inline=True)
                     embed.add_embed_field(name='📈 Profit', value=f"**{profit}€**", inline=True)
                     
@@ -207,32 +210,28 @@ def scan_task(auftrag):
 
                     webhook.add_embed(embed)
                     webhook.execute()
-                    print(f"✅ Gesendet: {preis}€ + {versand_preis}€ Versand")
+                    print(f"✅ Gesendet: {preis}€")
 
                 except Exception as e:
-                    print(f"Fehler bei Item-Details: {e}")
+                    print(f"Fehler bei Einzel-Item: {e}")
                     continue
 
-            time.sleep(2) # Kurze Pause vor nächstem Scan der Übersicht
-
         except Exception as e:
-            print(f"⚠️ Crash in {auftrag['name']}, Neustart...")
+            print(f"⚠️ Haupt-Loop Fehler in {auftrag['name']}: {e}")
             try: driver.quit()
             except: pass
             driver = create_driver()
-            time.sleep(5)
+            time.sleep(10)
 
 def start_bot():
-    print(f"🔥 COSTELLO PRÄZISIONS-BOT STARTET...")
-    print("HINWEIS: Dieser Bot öffnet jeden Artikel einzeln, um EXAKTE Preise zu finden.")
-    
+    print("🔥 COSTELLO META-SNIPER GESTARTET")
     threads = []
     for a in SUCH_AUFTRÄGE:
         t = threading.Thread(target=scan_task, args=(a,))
         t.daemon = True
         t.start()
         threads.append(t)
-        time.sleep(1.5) # Langsamerer Start um CPU zu schonen
+        time.sleep(2) 
 
     while True:
         time.sleep(10)
