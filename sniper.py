@@ -1,5 +1,6 @@
 import time
 import re
+import threading
 import os
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -13,7 +14,7 @@ from discord_webhook import DiscordWebhook, DiscordEmbed
 # =================================================================
 # KONFIGURATION
 # =================================================================
-BOT_NAME = "Costello Sniper by Lias"
+BOT_NAME = "Costello Sniper Elite"
 DEFAULT_SHIPPING = 3.50 
 
 MARKET_DATA = {
@@ -30,7 +31,7 @@ SUCH_AUFTRÄGE = [
     # --- RALPH LAUREN ---
     {"name": "RL Sweater (25)", "webhook": "https://discord.com/api/webhooks/1459964198363725908/RjvrERJNQ-iaKShFmMhVHaVfcBN3Td8JfwwCsDc2pQMXWm7vcOu3iH4982wjVBQK9kEF", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20sweater&price_to=25&order=newest_first"},
     {"name": "Polo Ralph (50)", "webhook": "https://discord.com/api/webhooks/1460654828807258427/5paOEA0obeueKQo9B7b-6EBromCEAcg-NS682OK6FW1fGkS1cxlyNLIXE0a8OUqmNIiV", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20polo&price_from=25&price_to=50&order=newest_first"},
-    {"name": "RL Sweater (50)", "webhook": "https://discord.com/api/webhooks/1460655000974786631/HMrBrLPgM9Eb_Egek7DuMN7IjgL-Q-AsQ6-hC1HvH3H5EJJi2yC76aohCgqt7JW-KU5y ", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20sweater&price_from=25&price_to=50&order=newest_first"},
+    {"name": "RL Sweater (50)", "webhook": "https://discord.com/api/webhooks/1460655000974786631/HMrBrLPgM9Eb_Egek7DuMN7IjgL-Q-AsQ6-hC1HvH3H5EJJi2yC76aohCgqt7JW-KU5y", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20sweater&price_from=25&price_to=50&order=newest_first"},
     {"name": "Polo Ralph (25)", "webhook": "https://discord.com/api/webhooks/1460654896767434815/TZuVMfoLzB8VMxEbyQqg_1iZ4E68MLOB8ri5gAWX6qO-DLZUf1NpcHEj4EMgANI1Y2kd", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20polo&price_to=25&order=newest_first"},
     {"name": "Ralph Lauren Polo (15)", "webhook": "https://discord.com/api/webhooks/1460655789302612140/wuDR9ww2JU33NBf1ZqSj2wBNkOzinlRpsHLrIfGoD1Dyrht_QBjgmULigYFGQvM8rKHx", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20polo&price_to=15&order=newest_first"},
     {"name": "Ralph Lauren sweater (15)", "webhook": "https://discord.com/api/webhooks/1460655889454465034/FMY9RdPmHrggia1Cgm9KCHQ9AzBiQILGLtzgneqfBKZ5wBvS6ax63DqqaKmwcRNhcCv9", "vinted_url": "https://www.vinted.de/catalog?search_text=ralph%20lauren%20sweater&price_to=15&order=newest_first"},
@@ -57,7 +58,7 @@ SUCH_AUFTRÄGE = [
     {"name": "Pasha (25)", "webhook": "https://discord.com/api/webhooks/1460274208675205120/2XgKnQE_aB3TH9jhvJwZ4SpcCN1Y00-xTjd7Dm6yTh3CXIffqGhSmUk8lynAGeAGr0cC", "vinted_url": "https://www.vinted.de/catalog?search_text=pasha&price_to=25&order=newest_first"},
     {"name": "Pashanim (50)", "webhook": "https://discord.com/api/webhooks/1460274319858073764/gB6Rq-L02mymDD-FiQk7RpU4ZCJUeSI8lv7xYyEzWeIb_H2tHbY79TS62XMHhKdRpUsU", "vinted_url": "https://www.vinted.de/catalog?search_text=pashanim&price_to=50&order=newest_first"},
     {"name": "Pasha (50)", "webhook": "https://discord.com/api/webhooks/1460274319858073764/gB6Rq-L02mymDD-FiQk7RpU4ZCJUeSI8lv7xYyEzWeIb_H2tHbY79TS62XMHhKdRpUsU", "vinted_url": "https://www.vinted.de/catalog?search_text=pasha&price_to=50&order=newest_first"},
-    {"name": "swaeater (20)", "webhook": "https://discord.com/api/webhooks/1460300613635014901/oHJZSQewPOjZR_VxxdxKsGTKenywTsQ4uI9IpMxhwOVKAjHuxrYSCEM3LT5G2OEh7mHj", "vinted_url": "https://www.vinted.de/catalog?search_text=sweater&price_to=20&brand_ids[]=304&brand_ids[]=677891&brand_ids[]=268734&brand_ids[]=5988006&brand_ids[]=7278799&brand_ids[]=7108764&brand_ids[]=7133888&brand_ids[]=88&brand_ids[]=4273&brand_ids[]=430791&brand_ids[]=442625&brand_ids[]=6962946"},
+    {"name": "sweater (20)", "webhook": "https://discord.com/api/webhooks/1460300613635014901/oHJZSQewPOjZR_VxxdxKsGTKenywTsQ4uI9IpMxhwOVKAjHuxrYSCEM3LT5G2OEh7mHj", "vinted_url": "https://www.vinted.de/catalog?search_text=sweater&price_to=20&brand_ids[]=304&brand_ids[]=677891&brand_ids[]=268734&brand_ids[]=5988006&brand_ids[]=7278799&brand_ids[]=7108764&brand_ids[]=7133888&brand_ids[]=88&brand_ids[]=4273&brand_ids[]=430791&brand_ids[]=442625&brand_ids[]=6962946"},
 
     # --- GRÖSSE L SPEZIAL ---
     {"name": "Lacoste Polo L (15)", "webhook": "https://discord.com/api/webhooks/1460230213391614076/fwXUTreF8vrgHZei7QFGHkxd_6OgVz-Biq6-aF9Ur4kNRLj7CWWjSX0WEZ6UnrSmH3on", "vinted_url": "https://www.vinted.de/catalog?search_text=lacoste%20polo&price_to=15&size_id[]=3&order=newest_first"},
@@ -85,101 +86,81 @@ def create_driver():
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("window-size=2560,1440")
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
+    # Performance: Keine Bilder laden
+    options.add_experimental_option("prefs", {"profile.managed_default_content_settings.images": 2})
     return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
-def start_bot():
+def scan_task(auftrag):
     driver = create_driver()
     seen_items = set()
-    print("🚀 SNIPER GESTARTET - ALLE AUFTRÄGE AKTIV")
+    print(f"✅ Suche gestartet für: {auftrag['name']}")
 
     while True:
-        for auftrag in SUCH_AUFTRÄGE:
-            try:
-                driver.get(auftrag['vinted_url'])
-                WebDriverWait(driver, 8).until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'feed-grid__item')]")))
-                items = driver.find_elements(By.XPATH, "//div[contains(@class, 'feed-grid__item')]")
+        try:
+            driver.get(auftrag['vinted_url'])
+            # Warten bis Items geladen sind
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'feed-grid__item')]")))
+            
+            items = driver.find_elements(By.XPATH, "//div[contains(@class, 'feed-grid__item')]")
 
-                for item in items[:5]:
+            for item in items[:5]:
+                try:
+                    url_elem = item.find_element(By.TAG_NAME, "a")
+                    url = url_elem.get_attribute("href")
+                    if not url or "items" not in url: continue
+                    item_id = url.split("/")[-1].split("-")[0]
+                    
+                    if item_id in seen_items: continue
+                    seen_items.add(item_id)
+
+                    # --- DATEN EXTRAKTION ---
+                    full_text = item.text
+                    lines = [l.strip() for l in full_text.split('\n') if l.strip()]
+
+                    preis = 0.0
+                    groesse = "-"
+                    
+                    for line in lines:
+                        if "€" in line and "VERSAND" not in line.upper():
+                            match = re.search(r"(\d+[,.]\d+)", line)
+                            if match: preis = float(match.group(1).replace(",", "."))
+                    
+                    # --- DISCORD SENDEN ---
+                    webhook = DiscordWebhook(url=auftrag['webhook'], username=BOT_NAME)
+                    embed = DiscordEmbed(title=f"📦 {auftrag['name']}", color='2ecc71', url=url)
+                    embed.add_embed_field(name='🏷️ PREIS', value=f"**{preis}€**", inline=True)
+                    
                     try:
-                        url_elem = item.find_element(By.TAG_NAME, "a")
-                        url = url_elem.get_attribute("href")
-                        if not url or "items" not in url: continue
-                        item_id = url.split("/")[-1].split("-")[0]
-                        
-                        if item_id in seen_items: continue
-                        seen_items.add(item_id)
+                        img = item.find_element(By.TAG_NAME, "img").get_attribute("src")
+                        if img: embed.set_image(url=img)
+                    except: pass
 
-                        # --- TEXTANALYSE ---
-                        full_text_block = item.text
-                        lines = [line.strip() for line in full_text_block.split('\n') if line.strip()]
+                    webhook.add_embed(embed)
+                    webhook.execute()
+                    print(f"🚀 Treffer in {auftrag['name']}: {preis}€")
 
-                        artikel_preis = 0.0
-                        groesse = "-"
-                        versand_preis = DEFAULT_SHIPPING
+                except: continue
+            
+            time.sleep(1) # Kurze Pause zwischen Refreshes
 
-                        # 1. PREIS
-                        for line in lines:
-                            if "€" in line and "VERSAND" not in line.upper():
-                                match = re.search(r"(\d+[,.]\d+)", line)
-                                if match:
-                                    artikel_preis = float(match.group(1).replace(",", "."))
-                                    break
+        except Exception as e:
+            # Bei Fehlern (z.B. Timeout) Driver neustarten
+            driver.quit()
+            driver = create_driver()
+            time.sleep(5)
 
-                        # 2. GRÖSSE
-                        for line in lines:
-                            clean = line.upper().strip()
-                            if clean in VALID_SIZES:
-                                groesse = clean; break
-                        if groesse == "-":
-                            for s in VALID_SIZES:
-                                if re.search(rf"(^|\s|/){s}($|\s|/)", full_text_block.upper()):
-                                    groesse = s; break
+def start_bot():
+    print(f"🔥 COSTELLO SNIPER STARTET MIT {len(SUCH_AUFTRÄGE)} AUFTRÄGEN GLEICHZEITIG...")
+    threads = []
+    for a in SUCH_AUFTRÄGE:
+        t = threading.Thread(target=scan_task, args=(a,))
+        t.daemon = True
+        t.start()
+        threads.append(t)
+        time.sleep(0.5) # Anti-Spam Start
 
-                        # 3. VERSAND
-                        for line in lines:
-                            if "€" in line and "VERSAND" in line.upper():
-                                match = re.search(r"(\d+[,.]\d+)", line)
-                                if match:
-                                    versand_preis = float(match.group(1).replace(",", "."))
-                                    break
-
-                        # --- BERECHNUNG ---
-                        fee = round(0.70 + (artikel_preis * 0.05), 2)
-                        total = round(artikel_preis + fee + versand_preis, 2)
-                        
-                        marktwert = 25.0 # Fallback
-                        for brand, val in MARKET_DATA.items():
-                            if brand in url.lower() or brand in auftrag['name'].lower(): 
-                                marktwert = val; break
-                        profit = round(marktwert - total, 2)
-
-                        if artikel_preis > 0:
-                            webhook = DiscordWebhook(url=auftrag['webhook'], username=BOT_NAME)
-                            embed = DiscordEmbed(title=f"📦 {auftrag['name']}", color='2ecc71', url=url)
-                            embed.add_embed_field(name='📏 GRÖSSE', value=f"**{groesse}**", inline=True)
-                            embed.add_embed_field(name='🏷️ ARTIKEL', value=f"{artikel_preis}€", inline=True)
-                            embed.add_embed_field(name='🚚 VERSAND', value=f"{versand_preis}€", inline=True)
-                            embed.add_embed_field(name='💰 GESAMT', value=f"**{total}€**", inline=True)
-                            embed.add_embed_field(name='📊 PROFIT', value=f"**{profit}€**", inline=True)
-
-                            try:
-                                img = item.find_element(By.TAG_NAME, "img").get_attribute("src")
-                                if img: embed.set_image(url=img)
-                            except: pass
-
-                            webhook.add_embed(embed)
-                            webhook.execute()
-                            print(f"✅ Gesendet: {auftrag['name']} ({artikel_preis}€)")
-
-                    except Exception: continue
-            except Exception as e:
-                print(f"Browser Fehler: {e}")
-                driver.quit()
-                driver = create_driver()
-                break
-        time.sleep(2)
+    while True:
+        time.sleep(1)
 
 if __name__ == "__main__":
     start_bot()
