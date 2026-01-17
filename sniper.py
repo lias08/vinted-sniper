@@ -50,6 +50,14 @@ SUCH_AUFTRÄGE = [
     {"name": "Nike Tracksuit (25)", "webhook": "https://discord.com/api/webhooks/1460655532418269306/OYFbbaCBOCIjHBUKTjoHdB60UpA8CX0rb5627Gm4G_MlJfNMmlrM8H8jI14fHY3QqxI6", "vinted_url": "https://www.vinted.de/catalog?search_text=nike%20tracksuits&price_to=25&order=newest_first"},
     {"name": "Nike Tracksuit (50)", "webhook": "https://discord.com/api/webhooks/1459969817581715466/l_HmH5J_SDR_FE-m_aoWIKU7x2Qh2FJ3FgBRldPpWwBhrFmMjS6U-DsdLTbLzaWJrboO", "vinted_url": "https://www.vinted.de/catalog?search_text=nike%20track%20suit&price_from=25&price_to=50&order=newest_first"},
 
+ # --- anfänger ---
+    {"name": "sweater (30)", "webhook": "https://discord.com/api/webhooks/1462059038693916889/U8p99aMuoSjBK8qdbR7_p0e9PurxZwBgHiiIBjeOVMIkB8r2ObD0q06M1w-zUqpOZJAQ", "vinted_url": "https://www.vinted.de/catalog?search_text=sweater&catalog[]=1811&page=1&search_id=30384105357&time=1768652417&size_ids[]=207&size_ids[]=208&size_ids[]=209&price_to=30&currency=EUR&order=newest_first"},
+    {"name": "afänger", "webhook": "https://discord.com/api/webhooks/1462059038693916889/U8p99aMuoSjBK8qdbR7_p0e9PurxZwBgHiiIBjeOVMIkB8r2ObD0q06M1w-zUqpOZJAQ", "vinted_url": "https://www.vinted.de/catalog?search_text=sweater&catalog[]=1811&page=1&search_id=30384105357&time=1768652582&size_ids[]=207&size_ids[]=208&size_ids[]=209&price_to=30&currency=EUR&order=newest_first&brand_ids[]=304&brand_ids[]=88"},
+  {"name": "sweater (30)", "webhook": "https://discord.com/api/webhooks/1462059038693916889/U8p99aMuoSjBK8qdbR7_p0e9PurxZwBgHiiIBjeOVMIkB8r2ObD0q06M1w-zUqpOZJAQ", "vinted_url": "https://www.vinted.de/catalog?search_text=pull&catalog[]=1811&page=1&search_id=30384230052&time=1768652658&size_ids[]=207&size_ids[]=208&size_ids[]=209&price_to=30&currency=EUR&order=newest_first&brand_ids[]=304&brand_ids[]=88&search_by_image_uuid="},
+    {"name": "afänger", "webhook": "https://discord.com/api/webhooks/1462059038693916889/U8p99aMuoSjBK8qdbR7_p0e9PurxZwBgHiiIBjeOVMIkB8r2ObD0q06M1w-zUqpOZJAQ", "vinted_url": "https://www.vinted.de/catalog?search_text=pullover&catalog[]=1811&page=1&search_id=30384240038&time=1768652680&size_ids[]=207&size_ids[]=208&size_ids[]=209&price_to=30&currency=EUR&order=newest_first&brand_ids[]=304&brand_ids[]=88&search_by_image_uuid="},
+
+
+
     # --- PASHANIM / SPECIAL ---
     {"name": "Pashanim (15)", "webhook": "https://discord.com/api/webhooks/1460274126315982914/m-Vj7rvBdQ0x-ksVoNw9L21IzYYMVDSvyzhfxszW7_DdHZLTzlj31w2RhuYkzlQtIpSW", "vinted_url": "https://www.vinted.de/catalog?search_text=pashanim&price_to=15&order=newest_first"},
     {"name": "Pasha (15)", "webhook": "https://discord.com/api/webhooks/1460274126315982914/m-Vj7rvBdQ0x-ksVoNw9L21IzYYMVDSvyzhfxszW7_DdHZLTzlj31w2RhuYkzlQtIpSW", "vinted_url": "https://www.vinted.de/catalog?search_text=pasha&price_to=15&order=newest_first"},
