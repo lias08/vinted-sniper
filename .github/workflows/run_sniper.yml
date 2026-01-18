@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: System Cleanup
+      - name: Cleanup Chrome
         run: |
           sudo pkill -9 chrome || true
           sudo pkill -9 chromedriver || true
@@ -30,7 +30,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install selenium==4.15.2 webdriver-manager discord-webhook
+          pip install selenium webdriver-manager discord-webhook
 
       - name: Run Sniper
         run: python sniper.py
