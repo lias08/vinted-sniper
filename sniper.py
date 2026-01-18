@@ -11,9 +11,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from discord_webhook import DiscordWebhook, DiscordEmbed
 
-# =================================================================
-# KONFIGURATION
-# =================================================================
+# KONFIGURATION (Bleibt gleich)
 BOT_NAME = "Costello Sniper by Lias"
 DEFAULT_SHIPPING = 3.50 
 
@@ -48,10 +46,9 @@ def create_driver():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
-    # Stealth-Modus gegen Cloudflare
-    options.add_argument(f"user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
+    # Mehr Stealth-Header
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36")
+    options.add_argument("--disable-blink-features=AutomationControlled")
     
     service = Service(ChromeDriverManager().install())
     return webdriver.Chrome(service=service, options=options)
@@ -59,22 +56,33 @@ def create_driver():
 def start_bot():
     driver = create_driver()
     seen_items = set()
-    print(f"🚀 SNIPER START - {len(SUCH_AUFTRÄGE)} AUFTRÄGE")
+    print("🚀 SNIPER GESTARTET...")
 
     start_time = time.time()
-    while (time.time() - start_time) < 800: # Läuft ca. 13 Minuten
+    while (time.time() - start_time) < 600: # 10 Minuten Laufzeit
         for auftrag in SUCH_AUFTRÄGE:
             try:
+                print(f"Prüfe: {auftrag['name']}...")
                 driver.get(auftrag['vinted_url'])
-                
-                # Cookie Banner Check
+                time.sleep(5) # Wichtig: Vinted braucht Zeit zum Laden
+
+                # DEBUG: Screenshot machen, um zu sehen was passiert
+                driver.save_screenshot("last_view.png")
+
+                # Prüfen auf Block
+                if "Access Denied" in driver.page_source:
+                    print("❌ BLOCKIERT: Cloudflare hat zugeschlagen.")
+                    continue
+
+                # Cookie Banner wegklicken
                 try:
-                    WebDriverWait(driver, 3).until(EC.element_to_be_clickable((By.ID, "onetrust-accept-btn-handler"))).click()
+                    driver.find_element(By.ID, "onetrust-accept-btn-handler").click()
                 except: pass
 
-                # Warten auf Produkte
-                WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'feed-grid__item')]")))
-                items = driver.find_elements(By.XPATH, "//div[contains(@class, 'feed-grid__item')]")
+                # Suche nach Artikel-Containern (verschiedene Selektoren)
+                items = driver.find_elements(By.XPATH, "//div[contains(@class, 'feed-grid__item')] | //div[@data-testid='grid-item']")
+                
+                print(f"Gefundene Elemente: {len(items)}")
 
                 for item in items[:5]:
                     try:
@@ -86,37 +94,25 @@ def start_bot():
                         if item_id in seen_items: continue
                         seen_items.add(item_id)
 
-                        # DATEN EXTRAKTION (Robusterer Weg)
-                        full_text = item.text
-                        lines = [l.strip() for l in full_text.split('\n') if l.strip()]
+                        # Extraktion
+                        text = item.text
+                        lines = [l.strip() for l in text.split('\n') if l.strip()]
                         
-                        artikel_preis = 0.0
+                        preis = 0.0
                         groesse = "N/A"
-
                         for line in lines:
-                            # Preis finden
-                            if "€" in line and "VERSAND" not in line.upper():
+                            if "€" in line and not "Versand" in line:
                                 m = re.search(r"(\d+[.,]\d+)", line)
-                                if m: artikel_preis = float(m.group(1).replace(",", "."))
-                            # Größe finden
+                                if m: preis = float(m.group(1).replace(",", "."))
                             if line.upper() in VALID_SIZES:
                                 groesse = line.upper()
 
-                        if artikel_preis > 0:
-                            fee = round(0.70 + (artikel_preis * 0.05), 2)
-                            total = round(artikel_preis + fee + DEFAULT_SHIPPING, 2)
-                            
-                            marktwert = 30.0
-                            for brand, val in MARKET_DATA.items():
-                                if brand in url.lower(): marktwert = val; break
-                            profit = round(marktwert - total, 2)
-
-                            # DISCORD SENDEN
+                        if preis > 0:
+                            # Discord Webhook (dein bestehender Code)
                             webhook = DiscordWebhook(url=auftrag['webhook'], username=BOT_NAME)
                             embed = DiscordEmbed(title=f"💎 {auftrag['name']}", color='2ecc71', url=url)
                             embed.add_embed_field(name='📏 GRÖSSE', value=f"**{groesse}**", inline=True)
-                            embed.add_embed_field(name='💰 GESAMT', value=f"**{total}€**", inline=True)
-                            embed.add_embed_field(name='📊 PROFIT', value=f"**{profit}€**", inline=True)
+                            embed.add_embed_field(name='💰 PREIS', value=f"**{preis}€**", inline=True)
                             
                             try:
                                 img = item.find_element(By.TAG_NAME, "img").get_attribute("src")
@@ -125,13 +121,14 @@ def start_bot():
 
                             webhook.add_embed(embed)
                             webhook.execute()
-                            print(f"✅ GESENDET: {auftrag['name']} - {total}€")
+                            print(f"✅ Artikel gefunden und gesendet!")
 
-                    except: continue
-                time.sleep(random.uniform(2, 4)) # Menschliche Pause
+                    except Exception as e:
+                        continue
             except Exception as e:
-                print(f"⚠️ Fehler bei {auftrag['name']} (Wahrscheinlich Block oder Timeout)")
-                continue
+                print(f"Fehler: {e}")
+        
+        time.sleep(10) # Pause gegen Spam-Sperre
 
     driver.quit()
 
