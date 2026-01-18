@@ -1,9 +1,5 @@
 name: Vinted Sniper
 
-concurrency:
-  group: sniper-vinted-group
-  cancel-in-progress: true 
-
 on:
   workflow_dispatch:      
   schedule:
@@ -12,7 +8,6 @@ on:
 jobs:
   snipe:
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -22,15 +17,21 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Cleanup Chrome
+      - name: Install Chrome
         run: |
-          sudo pkill -9 chrome || true
-          sudo pkill -9 chromedriver || true
-          rm -rf /home/runner/.wdm/
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
 
-      - name: Install Dependencies
-        run: |
-          pip install selenium webdriver-manager discord-webhook
+      - name: Install Deps
+        run: pip install selenium webdriver-manager discord-webhook
 
       - name: Run Sniper
         run: python sniper.py
+
+      # NEU: Screenshot speichern, damit du ihn online anschauen kannst
+      - name: Upload Debug Screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vinted-debug-image
+          path: last_view.png
