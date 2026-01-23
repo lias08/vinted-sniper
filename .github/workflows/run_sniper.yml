@@ -1,40 +1,21 @@
-name: Vinted Sniper
-
+name: 24/7 MAX SPEED
 on:
-  workflow_dispatch:      
   schedule:
-    - cron: '*/10 * * * *' # Alle 10 Minuten starten
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
 
 jobs:
   snipe:
     runs-on: ubuntu-latest
-    timeout-minutes: 12 # Verhindert unendliches Hängen
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-
       - name: Install Chrome
         run: |
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
-
-      - name: Install Dependencies
-        run: pip install selenium webdriver-manager discord-webhook
-
+          pip install selenium webdriver-manager discord-webhook
       - name: Run Sniper
         run: python sniper.py
-        env:
-          PYTHONUNBUFFERED: 1
-
-      - name: Upload Debug Screenshot on Failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-screenshot
-          path: last_view.png
